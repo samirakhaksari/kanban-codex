@@ -15,6 +15,8 @@ import {
   CardPriority,
   ChecklistItem,
   isBoardState,
+  TEAM_MEMBERS,
+  TeamMember,
   updateCard,
 } from "@/lib/board";
 
@@ -129,6 +131,10 @@ type Copy = {
   removeChecklistItem: (title: string) => string;
   checklistProgress: (done: number, total: number) => string;
   overdueTag: string;
+  assigneesLabel: string;
+  assigneesHelp: string;
+  noAssigneesSelected: string;
+  assignedTo: (names: string[]) => string;
 };
 
 const copyByLanguage: Record<Language, Copy> = {
@@ -232,6 +238,10 @@ const copyByLanguage: Record<Language, Copy> = {
     removeChecklistItem: (title) => "حذف مورد " + title,
     checklistProgress: (done, total) => "فهرست: " + new Intl.NumberFormat("fa-IR").format(done) + " از " + new Intl.NumberFormat("fa-IR").format(total),
     overdueTag: "عقب‌افتاده",
+    assigneesLabel: "اعضای مسئول",
+    assigneesHelp: "یک یا چند عضو تیم را انتخاب کنید.",
+    noAssigneesSelected: "هنوز عضوی انتخاب نشده است.",
+    assignedTo: (names) => "مسئولان: " + names.join("، "),
     footerHint: "وضعیت کارها را شفاف نگه دارید و گام بعدی را مشخص کنید.",
   },
   en: {
@@ -334,6 +344,10 @@ const copyByLanguage: Record<Language, Copy> = {
     removeChecklistItem: (title) => "Remove " + title,
     checklistProgress: (done, total) => done + "/" + total + " tasks",
     overdueTag: "Overdue",
+    assigneesLabel: "Assignees",
+    assigneesHelp: "Select one or more team members.",
+    noAssigneesSelected: "No team members selected yet.",
+    assignedTo: (names) => "Assigned to: " + names.join(", "),
     footerHint: "Keep the work visible. Keep the next step small.",
   },
 };
@@ -365,6 +379,17 @@ const persianSampleCards: Record<string, { title: string; details: string }> = {
 };
 
 const sampleCardDefaults = Object.fromEntries(createInitialBoard().cards.map((card) => [card.id, card]));
+
+function seedSampleAssigneesIfMissing(board: BoardState): BoardState {
+  return {
+    ...board,
+    cards: board.cards.map((card) => {
+      const assigneeIds = sampleCardDefaults[card.id]?.assigneeIds;
+      if (!assigneeIds || card.assigneeIds !== undefined) return card;
+      return { ...card, assigneeIds: [...assigneeIds] };
+    }),
+  };
+}
 const persianSampleMetadata: Record<string, { labels: string[]; checklist: Record<string, string> }> = {
   brief: { labels: ["عرضه", "محتوا"], checklist: { "brief-copy": "هماهنگ‌کردن پیام صفحه‌ی اصلی", "brief-review": "بازبینی متن نهایی" } },
   research: { labels: ["پژوهش"], checklist: { "research-themes": "دسته‌بندی نکته‌های تکراری", "research-summary": "خلاصه‌کردن نیازهای مشتریان" } },
@@ -479,6 +504,20 @@ function formatDueDate(value: string, language: Language) {
 function priorityText(priority: CardPriority, copy: Copy) {
   return priority === "high" ? copy.priorityHigh : priority === "medium" ? copy.priorityMedium : copy.priorityLow;
 }
+function teamMemberName(member: TeamMember, language: Language) {
+  return language === "fa" ? member.nameFa : member.nameEn;
+}
+
+function teamMemberInitials(member: TeamMember, language: Language) {
+  const name = teamMemberName(member, language);
+  const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("");
+  return language === "fa" ? initials : initials.toUpperCase();
+}
+
+function cardAssignedMembers(card: BoardCard) {
+  const selected = new Set(card.assigneeIds ?? []);
+  return TEAM_MEMBERS.filter((member) => selected.has(member.id));
+}
 function CardDetailsModal({ card, language, copy, onClose, onSave }: {
   card: BoardCard; language: Language; copy: Copy; onClose: () => void; onSave: (updates: CardUpdate) => void;
 }) {
@@ -491,6 +530,7 @@ function CardDetailsModal({ card, language, copy, onClose, onSave }: {
   const [labels, setLabels] = useState(displayedMetadata.labels.join(", "));
   const [checklist, setChecklist] = useState<ChecklistItem[]>(displayedMetadata.checklist);
   const [newItem, setNewItem] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(card.assigneeIds ?? []);
   function addChecklist() {
     const text = newItem.trim();
     if (!text) return;
@@ -505,6 +545,7 @@ function CardDetailsModal({ card, language, copy, onClose, onSave }: {
       details: details.trim() === displayed.details ? card.details : details.trim(),
       priority: priority || undefined,
       dueDate: dueDate || undefined,
+      assigneeIds: [...assigneeIds],
       labels: (() => {
         const nextLabels = Array.from(new Set(labels.split(/[,\n]/).map((label) => label.trim()).filter(Boolean)));
         const unchanged = nextLabels.length === displayedMetadata.labels.length && nextLabels.every((label, index) => label === displayedMetadata.labels[index]);
@@ -532,6 +573,32 @@ function CardDetailsModal({ card, language, copy, onClose, onSave }: {
             <label className="dialog-field"><span>{copy.dueDateLabel}</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
           </div>
           <label className="dialog-field"><span>{copy.labelsLabel}</span><input value={labels} placeholder={copy.labelsPlaceholder} onChange={(event) => setLabels(event.target.value)} /><small>{copy.labelsHelp}</small></label>
+          <fieldset className="assignee-picker">
+            <legend>{copy.assigneesLabel}</legend>
+            <p className="assignee-picker-help">{copy.assigneesHelp}</p>
+            {assigneeIds.length === 0 && <p className="assignee-empty">{copy.noAssigneesSelected}</p>}
+            <div className="assignee-options">
+              {TEAM_MEMBERS.map((member) => {
+                const name = teamMemberName(member, language);
+                const checked = assigneeIds.includes(member.id);
+                return (
+                  <label className="assignee-option" key={member.id}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setAssigneeIds((current) => current.includes(member.id)
+                        ? current.filter((id) => id !== member.id)
+                        : [...current, member.id])}
+                    />
+                    <span className="team-avatar" aria-hidden="true" style={{ "--member-color": member.color } as CSSProperties}>
+                      {teamMemberInitials(member, language)}
+                    </span>
+                    <span>{name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           <section className="checklist-editor" aria-label={copy.checklistLabel}>
             <h3>{copy.checklistLabel}</h3>
             {checklist.length > 0 && <ul>{checklist.map((item) => (
@@ -651,7 +718,7 @@ export function KanbanBoard() {
         const stored = window.localStorage.getItem("kanban-codex.board.v1");
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
-          if (isBoardState(parsed)) setBoard(seedSampleMetadataIfMissing(parsed));
+          if (isBoardState(parsed)) setBoard(seedSampleAssigneesIfMissing(seedSampleMetadataIfMissing(parsed)));
         }
       } catch {
         setStorageUnavailable(true);
@@ -924,6 +991,22 @@ export function KanbanBoard() {
                         {(card.labels?.length ?? 0) > 0 && <div className="card-labels">{card.labels?.map((label) => <span className="card-label" key={label}>{label}</span>)}</div>}
                         {(card.checklist?.length ?? 0) > 0 && <span className="checklist-summary">{copy.checklistProgress(card.checklist?.filter((item) => item.done).length ?? 0, card.checklist?.length ?? 0)}</span>}
                       </div>}
+                      {cardAssignedMembers(card).length > 0 && (
+                        <div
+                          className="card-assignees"
+                          role="group"
+                          aria-label={copy.assignedTo(cardAssignedMembers(card).map((member) => teamMemberName(member, language)))}
+                        >
+                          {cardAssignedMembers(card).map((member) => (
+                            <span className="assignee-chip" key={member.id} title={teamMemberName(member, language)}>
+                              <span className="team-avatar" aria-hidden="true" style={{ "--member-color": member.color } as CSSProperties}>
+                                {teamMemberInitials(member, language)}
+                              </span>
+                              <span className="assignee-chip-name">{teamMemberName(member, language)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="card-rule" aria-hidden="true" />
                     </article>
                   ))}

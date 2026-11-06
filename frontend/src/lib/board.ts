@@ -11,6 +11,20 @@ export type ChecklistItem = {
   done: boolean;
 };
 
+export type TeamMember = {
+  id: string;
+  nameFa: string;
+  nameEn: string;
+  color: string;
+};
+
+export const TEAM_MEMBERS: TeamMember[] = [
+  { id: "sara-ahmadi", nameFa: "سارا احمدی", nameEn: "Sara Ahmadi", color: "#67317f" },
+  { id: "arman-karimi", nameFa: "آرمان کریمی", nameEn: "Arman Karimi", color: "#1476a3" },
+  { id: "nika-moradi", nameFa: "نیکا مرادی", nameEn: "Nika Moradi", color: "#287154" },
+  { id: "reza-farahani", nameFa: "رضا فرهادی", nameEn: "Reza Farahani", color: "#8a5d00" },
+];
+
 export type BoardCard = {
   id: string;
   columnId: string;
@@ -20,6 +34,7 @@ export type BoardCard = {
   dueDate?: string;
   labels?: string[];
   checklist?: ChecklistItem[];
+  assigneeIds?: string[];
 };
 
 export type BoardState = {
@@ -45,7 +60,7 @@ export function createInitialBoard(): BoardState {
     columns: INITIAL_COLUMNS.map((column) => ({ ...column })),
     cards: [
       {
-        id: "brief", columnId: "backlog", title: "Shape the launch story", details: "Align the homepage message with the product promise.",
+        id: "brief", columnId: "backlog", assigneeIds: ["sara-ahmadi", "nika-moradi"], title: "Shape the launch story", details: "Align the homepage message with the product promise.",
         priority: "high", dueDate: sampleDueDate(3), labels: ["Launch", "Content"],
         checklist: [
           { id: "brief-copy", text: "Align the homepage message", done: true },
@@ -53,7 +68,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "research", columnId: "backlog", title: "Review customer notes", details: "Pull out the themes from the latest interview round.",
+        id: "research", columnId: "backlog", assigneeIds: ["reza-farahani"], title: "Review customer notes", details: "Pull out the themes from the latest interview round.",
         priority: "medium", dueDate: sampleDueDate(-2), labels: ["Research"],
         checklist: [
           { id: "research-themes", text: "Group recurring notes", done: false },
@@ -61,7 +76,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "design-system", columnId: "up-next", title: "Polish the design system", details: "Tighten spacing and document the core components.",
+        id: "design-system", columnId: "up-next", assigneeIds: ["arman-karimi", "sara-ahmadi"], title: "Polish the design system", details: "Tighten spacing and document the core components.",
         priority: "medium", dueDate: sampleDueDate(6), labels: ["Design System", "UI"],
         checklist: [
           { id: "design-spacing", text: "Audit spacing", done: true },
@@ -70,7 +85,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "onboarding", columnId: "up-next", title: "Map the first run", details: "Make the first five minutes feel effortless.",
+        id: "onboarding", columnId: "up-next", assigneeIds: ["nika-moradi"], title: "Map the first run", details: "Make the first five minutes feel effortless.",
         priority: "low", dueDate: sampleDueDate(9), labels: ["Onboarding"],
         checklist: [
           { id: "onboarding-steps", text: "Outline the first-run steps", done: false },
@@ -78,7 +93,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "homepage", columnId: "in-progress", title: "Build the new homepage", details: "Bring the approved direction into the live page.",
+        id: "homepage", columnId: "in-progress", assigneeIds: ["arman-karimi"], title: "Build the new homepage", details: "Bring the approved direction into the live page.",
         priority: "high", dueDate: sampleDueDate(1), labels: ["Development", "Launch"],
         checklist: [
           { id: "homepage-layout", text: "Implement the approved layout", done: true },
@@ -87,7 +102,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "analytics", columnId: "in-progress", title: "Add launch analytics", details: "Track the few signals that help us learn.",
+        id: "analytics", columnId: "in-progress", assigneeIds: ["sara-ahmadi", "reza-farahani"], title: "Add launch analytics", details: "Track the few signals that help us learn.",
         priority: "medium", dueDate: sampleDueDate(5), labels: ["Analytics"],
         checklist: [
           { id: "analytics-events", text: "Choose key events", done: false },
@@ -95,7 +110,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "mobile-review", columnId: "review", title: "Check mobile layouts", details: "Review the key screens at small breakpoints.",
+        id: "mobile-review", columnId: "review", assigneeIds: ["nika-moradi", "reza-farahani"], title: "Check mobile layouts", details: "Review the key screens at small breakpoints.",
         priority: "high", dueDate: sampleDueDate(-1), labels: ["Quality", "Mobile"],
         checklist: [
           { id: "mobile-screens", text: "Review the main screens", done: true },
@@ -103,7 +118,7 @@ export function createInitialBoard(): BoardState {
         ],
       },
       {
-        id: "brand", columnId: "done", title: "Confirm the visual direction", details: "The team is aligned on the new look and feel.",
+        id: "brand", columnId: "done", assigneeIds: ["sara-ahmadi"], title: "Confirm the visual direction", details: "The team is aligned on the new look and feel.",
         priority: "low", dueDate: sampleDueDate(-5), labels: ["Brand"],
         checklist: [
           { id: "brand-colors", text: "Approve the color palette", done: true },
@@ -194,6 +209,7 @@ export function isBoardState(value: unknown): value is BoardState {
     if (card.dueDate !== undefined && (typeof card.dueDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(card.dueDate))) return false;
     if (card.labels !== undefined && (!Array.isArray(card.labels) || !card.labels.every((label) => typeof label === "string"))) return false;
     if (card.checklist !== undefined && (!Array.isArray(card.checklist) || !card.checklist.every((item) => isRecord(item) && typeof item.id === "string" && typeof item.text === "string" && typeof item.done === "boolean"))) return false;
+    if (card.assigneeIds !== undefined && (!Array.isArray(card.assigneeIds) || !card.assigneeIds.every((id) => typeof id === "string"))) return false;
     return true;
   });
 }

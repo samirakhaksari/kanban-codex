@@ -240,6 +240,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .card-labels { display: flex; flex-wrap: wrap; gap: 4px; }
 .card-label { background: rgb(117 57 145 / 10%); border-radius: 5px; color: #70438a; font-size: 9px; padding: 4px 6px; }
 .checklist-summary { color: #728397; font-size: 9px; font-weight: 700; }
+.card-assignees { align-items: center; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.assignee-chip { align-items: center; background: rgb(255 255 255 / 58%); border: 1px solid rgb(3 33 71 / 9%); border-radius: 999px; color: #4b6074; display: inline-flex; font-size: 9px; gap: 5px; max-width: 100%; padding: 2px 7px 2px 3px; }
+.assignee-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-avatar { align-items: center; background: var(--member-color, var(--blue)); border-radius: 50%; color: #fff; display: inline-flex; flex: 0 0 auto; font-size: 8px; font-weight: 800; height: 20px; justify-content: center; width: 20px; }
 .details-card { flex: 0 0 auto; height: 23px; margin: -4px -4px 0 0; opacity: 0; width: 23px; }
 .card-rule { background: var(--card-accent, var(--yellow)); border-radius: 2px; height: 2px; margin-top: 12px; opacity: .82; width: 24px; }
 .empty-hint { border: 1px dashed #d4dde6; border-radius: 9px; color: #9aa5b1; font-size: 11px; padding: 15px 9px; text-align: center; }
@@ -471,6 +475,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .checklist-remove:hover { background: #fff0ee; color: #bd594d; }
 .checklist-add { align-items: center; display: flex; gap: 7px; }
 .checklist-add .form-button { flex: 0 0 auto; }
+.assignee-picker { border: 1px solid #e7ecf1; border-radius: 10px; margin: 0; min-width: 0; padding: 10px; }
+.assignee-picker legend { color: #66798c; font-size: 10px; font-weight: 700; padding: 0 5px; }
+.assignee-picker-help, .assignee-empty { color: #8997a5; font-size: 9px; margin: 0 0 8px; }
+.assignee-options { display: grid; gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.assignee-option { align-items: center; background: #f8fafb; border: 1px solid #e3eaf0; border-radius: 8px; color: #52667b; cursor: pointer; display: flex; gap: 8px; min-width: 0; padding: 7px 8px; }
+.assignee-option:hover { background: #edf7fb; border-color: #b5d9e9; }
+.assignee-option input { accent-color: var(--blue); flex: 0 0 auto; height: 14px; width: 14px; }
+.assignee-option > span:last-child { font-size: 10px; overflow-wrap: anywhere; }
 .dialog-actions { border-top: 1px solid #e8edf2; display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; padding-top: 13px; }
 :root[data-theme="dark"] .board-toolbar,
 :root[data-theme="dark"] .card-dialog { background: #1a2938; border-color: #304255; box-shadow: 0 12px 35px rgb(0 0 0 / 20%); }
@@ -499,6 +511,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 :root[data-theme="dark"] .card-due strong { background: #4a2d35; color: #ffb0a9; }
 :root[data-theme="dark"] .card-label { background: #3a2d46; color: #d6b2e9; }
 :root[data-theme="dark"] .checklist-summary { color: #bdc9d5; }
+:root[data-theme="dark"] .assignee-chip { background: rgb(12 24 37 / 48%); border-color: #3c4e62; color: #d7e1eb; }
+:root[data-theme="dark"] .assignee-picker { border-color: #34485c; }
+:root[data-theme="dark"] .assignee-picker legend { color: #b1bfcd; }
+:root[data-theme="dark"] .assignee-picker-help,
+:root[data-theme="dark"] .assignee-empty { color: #9eacba; }
+:root[data-theme="dark"] .assignee-option { background: #142230; border-color: #34495d; color: #d1dbe5; }
+:root[data-theme="dark"] .assignee-option:hover { background: #20394b; border-color: #426783; }
 :root[data-theme="dark"] .card-dialog-heading,
 :root[data-theme="dark"] .dialog-actions { border-color: #304255; }
 :root[data-theme="dark"] .card-dialog-heading h2,
@@ -520,4 +539,5 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   .card-dialog { border-radius: 16px 16px 10px 10px; max-height: 94vh; padding: 17px 14px; }
   .card-dialog-heading h2 { font-size: 16px; }
   .checklist-add { align-items: stretch; flex-direction: column; }
+  .assignee-options { grid-template-columns: 1fr; }
 }

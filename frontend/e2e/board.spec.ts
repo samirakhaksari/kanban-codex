@@ -20,11 +20,12 @@ test("adds, moves, renames, and deletes a card", async ({ page }) => {
   await backlog.getByRole("button", { name: "Add a card" }).click();
   await page.getByRole("textbox", { name: "Card title" }).fill("Prepare the launch email");
   await page.getByRole("textbox", { name: "Card details" }).fill("Draft, review, and schedule the message.");
-  await backlog.getByRole("button", { name: "Add card" }).click();
+  await backlog.getByRole("button", { name: "Add a card" }).click();
 
   const newCard = page.getByTestId(/^card-card-/).filter({ hasText: "Prepare the launch email" });
   await expect(newCard).toBeVisible();
-  await newCard.dragTo(inProgress);
+  await newCard.getByLabel("Move Prepare the launch email to another column").click();
+  await newCard.getByRole("button", { name: "Move to In progress" }).click();
   await expect(inProgress.getByText("Prepare the launch email")).toBeVisible();
 
   await page.getByRole("button", { name: "Rename column Review" }).click();
@@ -37,14 +38,33 @@ test("adds, moves, renames, and deletes a card", async ({ page }) => {
   await expect(page.getByText("Prepare the launch email")).toHaveCount(0);
 });
 
-test("returns to sample data on reload", async ({ page }) => {
+test("assigns cards to team members and saves the assignment", async ({ page }) => {
+  await openEnglishBoard(page);
+  const card = page.getByTestId("card-brief");
+
+  await expect(card.getByText("Sara Ahmadi")).toBeVisible();
+  await card.getByRole("button", { name: "Edit details for Shape the launch story" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("checkbox", { name: "Sara Ahmadi" }).uncheck();
+  await dialog.getByRole("checkbox", { name: "Arman Karimi" }).check();
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(card.getByText("Sara Ahmadi")).toHaveCount(0);
+  await expect(card.getByText("Arman Karimi")).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "English" }).click();
+  await expect(page.getByTestId("card-brief").getByText("Arman Karimi")).toBeVisible();
+});
+test("preserves board changes across reload", async ({ page }) => {
   await openEnglishBoard(page);
   const backlog = page.getByTestId("column-backlog");
   await backlog.getByRole("button", { name: "Add a card" }).click();
   await page.getByRole("textbox", { name: "Card title" }).fill("Temporary card");
-  await backlog.getByRole("button", { name: "Add card" }).click();
+  await backlog.getByRole("button", { name: "Add a card" }).click();
   await expect(page.getByText("Temporary card")).toBeVisible();
   await page.reload();
-  await expect(page.getByText("Temporary card")).toHaveCount(0);
+  await page.getByRole("button", { name: "English" }).click();
+  await expect(page.getByText("Temporary card")).toBeVisible();
   await expect(page.getByText("Shape the launch story")).toBeVisible();
 });

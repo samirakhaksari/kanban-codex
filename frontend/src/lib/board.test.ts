@@ -3,8 +3,10 @@ import {
   addCard,
   createInitialBoard,
   deleteCard,
+  isBoardState,
   moveCard,
   renameColumn,
+  TEAM_MEMBERS,
 } from "./board";
 
 describe("board state", () => {
@@ -16,6 +18,30 @@ describe("board state", () => {
       "Backlog", "Up next", "In progress", "Review", "Done",
     ]);
     expect(board.cards.length).toBeGreaterThan(0);
+  });
+
+  it("seeds sample cards with assignments from the team roster", () => {
+    const board = createInitialBoard();
+    const assignedIds = board.cards.flatMap((card) => card.assigneeIds ?? []);
+
+    expect(board.cards.every((card) => (card.assigneeIds?.length ?? 0) > 0)).toBe(true);
+    expect(new Set(assignedIds).size).toBeGreaterThan(1);
+    expect(assignedIds.every((id) => TEAM_MEMBERS.some((member) => member.id === id))).toBe(true);
+    expect(isBoardState(board)).toBe(true);
+
+    const legacyBoard = {
+      ...board,
+      cards: board.cards.map((card) => {
+        const legacyCard = { ...card };
+        delete legacyCard.assigneeIds;
+        return legacyCard;
+      }),
+    };
+    expect(isBoardState(legacyBoard)).toBe(true);
+    expect(isBoardState({
+      ...board,
+      cards: board.cards.map((card, index) => index === 0 ? { ...card, assigneeIds: [7] } : card),
+    })).toBe(false);
   });
 
   it("renames a column without changing the other columns", () => {

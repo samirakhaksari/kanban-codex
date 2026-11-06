@@ -22,11 +22,27 @@ describe("KanbanBoard", () => {
     fireEvent.click(within(backlog).getByRole("button", { name: "Add a card" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Card title" }), { target: { value: "Write release notes" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Card details" }), { target: { value: "Keep it short." } });
-    fireEvent.click(within(backlog).getByRole("button", { name: "Add card" }));
+    fireEvent.click(within(backlog).getByRole("button", { name: "Add a card" }));
 
     expect(screen.getByText("Write release notes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete: Write release notes" }));
     expect(screen.queryByText("Write release notes")).not.toBeInTheDocument();
+  });
+
+  it("shows sample assignees and lets a card be reassigned", () => {
+    renderEnglishBoard();
+    const card = screen.getByTestId("card-brief");
+
+    expect(within(card).getByText("Sara Ahmadi")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Edit details for Shape the launch story" }));
+
+    expect(screen.getByRole("group", { name: "Assignees" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sara Ahmadi" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Arman Karimi" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(within(card).queryByText("Sara Ahmadi")).not.toBeInTheDocument();
+    expect(within(card).getByText("Arman Karimi")).toBeInTheDocument();
   });
 
   it("renames a column", () => {
@@ -59,8 +75,8 @@ describe("KanbanBoard", () => {
 
   it("moves a card with the accessible move menu", () => {
     renderEnglishBoard();
-    fireEvent.click(screen.getByRole("button", { name: "Move Shape the launch story to another column" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move to In progress" }));
+    fireEvent.click(screen.getByLabelText("Move Shape the launch story to another column"));
+    fireEvent.click(within(screen.getByTestId("card-brief")).getByRole("button", { name: "Move to In progress" }));
 
     expect(within(screen.getByTestId("column-in-progress")).getByText("Shape the launch story")).toBeInTheDocument();
   });
