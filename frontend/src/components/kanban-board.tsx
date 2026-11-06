@@ -15,10 +15,12 @@ import {
   CardPriority,
   ChecklistItem,
   isBoardState,
-  TEAM_MEMBERS,
   TeamMember,
   updateCard,
 } from "@/lib/board";
+import { createInitialTeamDirectory, isTeamDirectory, type TeamDirectory } from "@/lib/team-directory";
+import { TeamAvatar } from "./team-avatar";
+import { TeamMembersPage } from "./team-members-page";
 
 const columnColors = ["#ecad0a", "#209dd7", "#753991", "#617a9b", "#43a07a"];
 const columnTints = ["#fff3ce", "#dff2fb", "#eee2f4", "#e4edf4", "#def1e7"];
@@ -453,6 +455,13 @@ function displayCardContent(card: BoardCard, language: Language) {
     details: card.details === original.details ? translated.details : card.details,
   };
 }
+function DashboardIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><rect x="13" y="3" width="8" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><rect x="13" y="10" width="8" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.7" /></svg>;
+}
+
+function TeamNavigationIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" /><path d="M3.5 19c.2-3 2.1-4.8 5.5-4.8s5.3 1.8 5.5 4.8M16 5.6a2.6 2.6 0 0 1 0 5.1m1.2 3.8c2.1.5 3.2 2 3.3 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
+}
 function BoardMark() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -508,29 +517,12 @@ function teamMemberName(member: TeamMember, language: Language) {
   return language === "fa" ? member.nameFa : member.nameEn;
 }
 
-function TeamAvatar({ member }: { member: TeamMember }) {
-  return (
-    <span className="team-avatar" aria-hidden="true" style={{ "--member-color": member.color } as CSSProperties}>
-      <svg viewBox="0 0 24 24" fill="none">
-        {member.gender === "female" ? (
-          <path d="M5.5 10a6.5 6.5 0 0 1 13 0v7.8c0 .8-.9 1.2-1.5.7L12 15l-5 3.5c-.6.5-1.5.1-1.5-.7V10Z" fill="currentColor" />
-        ) : (
-          <>
-            <circle cx="12" cy="10" r="3.6" fill="currentColor" />
-            <path d="M7.8 8.7c0-2.4 1.8-4.1 4.2-4.1s4.2 1.7 4.2 4.1c-1.6-.3-2.8-1-3.5-1.8-1.1 1-2.5 1.6-4.9 1.8Z" fill="var(--member-color)" />
-          </>
-        )}
-        <path d="M3.8 23c.3-4.3 3.6-7.2 8.2-7.2s7.9 2.9 8.2 7.2H3.8Z" fill="currentColor" />
-      </svg>
-    </span>
-  );
-}
-function cardAssignedMembers(card: BoardCard) {
+function cardAssignedMembers(card: BoardCard, members: TeamMember[]) {
   const selected = new Set(card.assigneeIds ?? []);
-  return TEAM_MEMBERS.filter((member) => selected.has(member.id));
+  return members.filter((member) => selected.has(member.id));
 }
-function CardDetailsModal({ card, language, copy, onClose, onSave }: {
-  card: BoardCard; language: Language; copy: Copy; onClose: () => void; onSave: (updates: CardUpdate) => void;
+function CardDetailsModal({ card, members, language, copy, onClose, onSave }: {
+  card: BoardCard; members: TeamMember[]; language: Language; copy: Copy; onClose: () => void; onSave: (updates: CardUpdate) => void;
 }) {
   const displayed = displayCardContent(card, language);
   const displayedMetadata = displayCardMetadata(card, language);
@@ -589,7 +581,7 @@ function CardDetailsModal({ card, language, copy, onClose, onSave }: {
             <p className="assignee-picker-help">{copy.assigneesHelp}</p>
             {assigneeIds.length === 0 && <p className="assignee-empty">{copy.noAssigneesSelected}</p>}
             <div className="assignee-options">
-              {TEAM_MEMBERS.map((member) => {
+              {members.map((member) => {
                 const name = teamMemberName(member, language);
                 const checked = assigneeIds.includes(member.id);
                 return (
@@ -707,10 +699,14 @@ function ColumnHeading({
 
 export function KanbanBoard() {
   const [board, setBoard] = useState<BoardState>(createInitialBoard);
+  const [teamDirectory, setTeamDirectory] = useState<TeamDirectory>(createInitialTeamDirectory);
+  const [teamDirectoryLoaded, setTeamDirectoryLoaded] = useState(false);
+  const [activeView, setActiveView] = useState<"dashboard" | "team-members">("dashboard");
   const [language, setLanguage] = useState<Language>("fa");
   const [theme, setTheme] = useState<Theme>("dark");
   const [boardLoaded, setBoardLoaded] = useState(false);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const [teamStorageUnavailable, setTeamStorageUnavailable] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
@@ -738,6 +734,23 @@ export function KanbanBoard() {
     return () => window.clearTimeout(timeoutId);
   }, []);
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem("kanban-codex.teams.v1");
+        if (stored) {
+          const parsed: unknown = JSON.parse(stored);
+          if (isTeamDirectory(parsed)) setTeamDirectory(parsed);
+          else setTeamStorageUnavailable(true);
+        }
+      } catch {
+        setTeamStorageUnavailable(true);
+      } finally {
+        setTeamDirectoryLoaded(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+  useEffect(() => {
     if (!boardLoaded) return;
     const timeoutId = window.setTimeout(() => {
       try {
@@ -750,11 +763,25 @@ export function KanbanBoard() {
     return () => window.clearTimeout(timeoutId);
   }, [board, boardLoaded]);
   useEffect(() => {
+    if (!teamDirectoryLoaded) return;
+    const timeoutId = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem("kanban-codex.teams.v1", JSON.stringify(teamDirectory));
+        setTeamStorageUnavailable(false);
+      } catch {
+        setTeamStorageUnavailable(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [teamDirectory, teamDirectoryLoaded]);
+  useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = language === "fa" ? "rtl" : "ltr";
     document.documentElement.dataset.theme = theme;
-    document.title = language === "fa" ? "کانبان کدکس — برد پروژه" : "Kanban Codex — Project board";
-  }, [language, theme]);
+    document.title = activeView === "dashboard"
+      ? language === "fa" ? "کانبان کدکس — برد پروژه" : "Kanban Codex — Project board"
+      : language === "fa" ? "کانبان کدکس — اعضای تیم" : "Kanban Codex — Team members";
+  }, [activeView, language, theme]);
   const today = localDateKey();
   const normalizedSearch = searchTerm.trim().normalize("NFKC").toLocaleLowerCase(language);
   const filteredCards = useMemo(() => board.cards.filter((card) => {
@@ -763,7 +790,7 @@ export function KanbanBoard() {
     if (dueFilter === "overdue" && !isCardOverdue(card, today)) return false;
     if (!normalizedSearch) return true;
     const displayed = displayCardContent(card, language);
-  const displayedMetadata = displayCardMetadata(card, language);
+    const displayedMetadata = displayCardMetadata(card, language);
     return [card.title, card.details, displayed.title, displayed.details, ...displayedMetadata.labels, ...displayedMetadata.checklist.map((item) => item.text)].join(" ").normalize("NFKC").toLocaleLowerCase(language).includes(normalizedSearch);
   }), [board.cards, dueFilter, language, normalizedSearch, priorityFilter, stageFilter, today]);
   const filtersActive = Boolean(normalizedSearch) || stageFilter !== "all" || priorityFilter !== "all" || dueFilter !== "all";
@@ -840,14 +867,54 @@ export function KanbanBoard() {
     setDraggingCardId(null);
   }
 
+  function removeMemberFromTeam(teamId: string, memberId: string) {
+    const nextTeams = teamDirectory.teams.map((team) => team.id === teamId
+      ? { ...team, memberIds: team.memberIds.filter((id) => id !== memberId) }
+      : team);
+    const stillInAnotherTeam = nextTeams.some((team) => team.memberIds.includes(memberId));
+    setTeamDirectory({
+      teams: nextTeams,
+      members: stillInAnotherTeam
+        ? teamDirectory.members
+        : teamDirectory.members.filter((member) => member.id !== memberId),
+    });
+    if (!stillInAnotherTeam) {
+      setBoard((current) => ({
+        ...current,
+        cards: current.cards.map((card) => {
+          if (!card.assigneeIds?.includes(memberId)) return card;
+          const assigneeIds = card.assigneeIds.filter((id) => id !== memberId);
+          return { ...card, assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined };
+        }),
+      }));
+    }
+  }
+
+  function deleteEmptyTeam(teamId: string) {
+    const team = teamDirectory.teams.find((item) => item.id === teamId);
+    if (!team || team.memberIds.length > 0) return false;
+    setTeamDirectory((current) => ({ ...current, teams: current.teams.filter((item) => item.id !== teamId) }));
+    return true;
+  }
   return (
-    <main className="shell" dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
-      <header className="topbar">
-        <div className="brand">
+    <div className="shell" dir="ltr">
+      <aside className="sidebar" dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
+        <div className="sidebar-brand brand">
           <span className="brand-mark"><BoardMark /></span>
           <span className="brand-name">kanban</span>
         </div>
-        <div className="crumb">{copy.breadcrumb}</div>
+        <nav className="sidebar-nav" aria-label={language === "fa" ? "منوی اصلی" : "Main navigation"}>
+          <button className={"sidebar-nav-item" + (activeView === "dashboard" ? " active" : "")} type="button" aria-current={activeView === "dashboard" ? "page" : undefined} onClick={() => setActiveView("dashboard")}>
+            <DashboardIcon /><span className="sidebar-nav-label">{language === "fa" ? "داشبورد" : "Dashboard"}</span>
+          </button>
+          <button className={"sidebar-nav-item" + (activeView === "team-members" ? " active" : "")} type="button" aria-current={activeView === "team-members" ? "page" : undefined} onClick={() => setActiveView("team-members")}>
+            <TeamNavigationIcon /><span className="sidebar-nav-label">{language === "fa" ? "اعضای تیم" : "Team members"}</span>
+          </button>
+        </nav>
+      </aside>
+      <div className="app-main" dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
+      <header className="topbar">
+        <div className="crumb">{copy.breadcrumb} / {activeView === "dashboard" ? (language === "fa" ? "داشبورد" : "Dashboard") : (language === "fa" ? "اعضای تیم" : "Team members")}</div>
         <div className="topbar-actions">
           <button
             className="theme-toggle"
@@ -867,6 +934,9 @@ export function KanbanBoard() {
         </div>
       </header>
 
+      <main className="view-content">
+        {activeView === "dashboard" ? (
+          <>
       <section className="page-head" aria-labelledby="page-title">
         <div className="eyebrow">{copy.projectBoard}</div>
         <div className="heading-row">
@@ -1000,13 +1070,13 @@ export function KanbanBoard() {
                         {(card.labels?.length ?? 0) > 0 && <div className="card-labels">{card.labels?.map((label) => <span className="card-label" key={label}>{label}</span>)}</div>}
                         {(card.checklist?.length ?? 0) > 0 && <span className="checklist-summary">{copy.checklistProgress(card.checklist?.filter((item) => item.done).length ?? 0, card.checklist?.length ?? 0)}</span>}
                       </div>}
-                      {cardAssignedMembers(card).length > 0 && (
+                      {cardAssignedMembers(card, teamDirectory.members).length > 0 && (
                         <div
                           className="card-assignees"
                           role="group"
-                          aria-label={copy.assignedTo(cardAssignedMembers(card).map((member) => teamMemberName(member, language)))}
+                          aria-label={copy.assignedTo(cardAssignedMembers(card, teamDirectory.members).map((member) => teamMemberName(member, language)))}
                         >
-                          {cardAssignedMembers(card).map((member) => (
+                          {cardAssignedMembers(card, teamDirectory.members).map((member) => (
                             <span className="assignee-chip" key={member.id} title={teamMemberName(member, language)}>
                               <TeamAvatar member={member} />
                               <span className="assignee-chip-name">{teamMemberName(member, language)}</span>
@@ -1177,7 +1247,20 @@ export function KanbanBoard() {
           </div>
         </section>
       </section>
-      {editingCard && <CardDetailsModal key={editingCard.id} card={editingCard} language={language} copy={copy} onClose={() => setEditingCardId(null)} onSave={saveCardDetails} />}
-    </main>
+      {editingCard && <CardDetailsModal key={editingCard.id} card={editingCard} members={teamDirectory.members} language={language} copy={copy} onClose={() => setEditingCardId(null)} onSave={saveCardDetails} />}
+          </>
+        ) : (
+          <TeamMembersPage
+            directory={teamDirectory}
+            language={language}
+            storageUnavailable={teamStorageUnavailable}
+            onDirectoryChange={setTeamDirectory}
+            onRemoveMember={removeMemberFromTeam}
+            onDeleteTeam={deleteEmptyTeam}
+          />
+        )}
+      </main>
+    </div>
+  </div>
   );
 }
