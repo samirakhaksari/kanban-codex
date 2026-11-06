@@ -897,7 +897,7 @@ export function KanbanBoard() {
     return true;
   }
   return (
-    <div className="shell" dir="ltr">
+    <div className="shell" dir={language === "fa" ? "rtl" : "ltr"}>
       <aside className="sidebar" dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
         <div className="sidebar-brand brand">
           <span className="brand-mark"><BoardMark /></span>
