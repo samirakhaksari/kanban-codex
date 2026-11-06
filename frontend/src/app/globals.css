@@ -243,7 +243,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .card-assignees { align-items: center; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .assignee-chip { align-items: center; background: rgb(255 255 255 / 58%); border: 1px solid rgb(3 33 71 / 9%); border-radius: 999px; color: #4b6074; display: inline-flex; font-size: 9px; gap: 5px; max-width: 100%; padding: 2px 7px 2px 3px; }
 .assignee-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-avatar { align-items: center; background: var(--member-color, var(--blue)); border-radius: 50%; color: #fff; display: inline-flex; flex: 0 0 auto; font-size: 8px; font-weight: 800; height: 20px; justify-content: center; width: 20px; }
+.team-avatar { align-items: center; background: var(--member-color, var(--blue)); border-radius: 50%; color: #fff; display: inline-flex; flex: 0 0 auto; height: 20px; justify-content: center; overflow: hidden; width: 20px; }
+.team-avatar svg { height: 18px; width: 18px; }
 .details-card { flex: 0 0 auto; height: 23px; margin: -4px -4px 0 0; opacity: 0; width: 23px; }
 .card-rule { background: var(--card-accent, var(--yellow)); border-radius: 2px; height: 2px; margin-top: 12px; opacity: .82; width: 24px; }
 .empty-hint { border: 1px dashed #d4dde6; border-radius: 9px; color: #9aa5b1; font-size: 11px; padding: 15px 9px; text-align: center; }

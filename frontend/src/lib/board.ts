@@ -16,13 +16,14 @@ export type TeamMember = {
   nameFa: string;
   nameEn: string;
   color: string;
+  gender: "female" | "male";
 };
 
 export const TEAM_MEMBERS: TeamMember[] = [
-  { id: "sara-ahmadi", nameFa: "سارا احمدی", nameEn: "Sara Ahmadi", color: "#67317f" },
-  { id: "arman-karimi", nameFa: "آرمان کریمی", nameEn: "Arman Karimi", color: "#1476a3" },
-  { id: "nika-moradi", nameFa: "نیکا مرادی", nameEn: "Nika Moradi", color: "#287154" },
-  { id: "reza-farahani", nameFa: "رضا فرهادی", nameEn: "Reza Farahani", color: "#8a5d00" },
+  { id: "sara-ahmadi", nameFa: "سارا احمدی", nameEn: "Sara Ahmadi", gender: "female", color: "#67317f" },
+  { id: "arman-karimi", nameFa: "آرمان کریمی", nameEn: "Arman Karimi", gender: "male", color: "#1476a3" },
+  { id: "nika-moradi", nameFa: "نیکا مرادی", nameEn: "Nika Moradi", gender: "female", color: "#287154" },
+  { id: "reza-farahani", nameFa: "رضا فرهادی", nameEn: "Reza Farahani", gender: "male", color: "#8a5d00" },
 ];
 
 export type BoardCard = {
