@@ -729,6 +729,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   .team-member-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
   .team-disclosure .team-inline-form { inset-inline-start: 0; min-width: min(280px, calc(100vw - 42px)); }
 }
-.team-avatar { background: var(--member-color); border-color: rgb(255 255 255 / 35%); color: #fff; }
+.team-avatar { background: #fff; border: 1px solid #c9d9ec; color: #19345b; }
 .team-avatar svg { height: 100%; width: 100%; }
-:root[data-theme="dark"] .team-avatar { background: var(--member-color); border-color: rgb(255 255 255 / 35%); }
+:root[data-theme="dark"] .team-avatar { background: #fff; border-color: #c9d9ec; color: #19345b; }
+.team-avatar-image { display: block; height: 100%; object-fit: contain; width: 100%; }
