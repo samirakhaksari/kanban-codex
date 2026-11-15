@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./workspace.css";
+import "./workspace-controls.css";
 
 export const metadata: Metadata = {
   title: "کانبان کدکس — برد پروژه",

@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   addCard,
   addColumn,
@@ -14,17 +14,26 @@ import {
   renameColumn,
   CardPriority,
   ChecklistItem,
-  isBoardState,
   TeamMember,
   updateCard,
 } from "@/lib/board";
-import { createInitialTeamDirectory, isTeamDirectory, type TeamDirectory } from "@/lib/team-directory";
+import type { TeamDirectory } from "@/lib/team-directory";
+import { PendingSaveError, sendAIChat, saveBoardState, saveTeamDirectory } from "@/lib/persistence";
+import type { AIChatMessage, AIChatResult } from "@/lib/persistence";
+import { AIAssistant } from "./ai-assistant";
 import { TeamAvatar } from "./team-avatar";
 import { TeamMembersPage } from "./team-members-page";
+import { ProfilePage } from "./profile-page";
+import { UserAvatar } from "./user-avatar";
+import { fetchProfile, profileName, type UserProfile } from "@/lib/profile";
 
 const columnColors = ["#ecad0a", "#209dd7", "#753991", "#617a9b", "#43a07a"];
 const columnTints = ["#fff3ce", "#dff2fb", "#eee2f4", "#e4edf4", "#def1e7"];
 const columnDarkTints = ["#3b3427", "#203847", "#332b3b", "#273543", "#243a33"];
+
+function createEntityId(prefix: string) {
+  return prefix + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+}
 
 type Language = "fa" | "en";
 type Theme = "light" | "dark";
@@ -116,8 +125,9 @@ type Copy = {
   clearFilters: string;
   resultsCount: (visible: number, total: number) => string;
   noMatchingCards: string;
-  savedLocally: string;
-  storageUnavailable: string;
+  saving: string;
+  saveFailed: string;
+  retrySave: string;
   openCardDetails: (title: string) => string;
   cardDetailsTitle: string;
   saveChanges: string;
@@ -144,71 +154,71 @@ const copyByLanguage: Record<Language, Copy> = {
     breadcrumb: "فضای کار  /  پروژه‌ها",
     projectBoard: "برد پروژه",
     projectTitle: "راه‌اندازی وب‌سایت",
-    subtitle: "وضعیت کارها و گام بعدی را در یک نگاه ببینید.",
-    boardNote: "همه‌ی کارها، در یک نگاه",
+    subtitle: "طراحی، توسعه و انتشار نسخهٔ جدید",
+    boardNote: "همه‌ی تسک‌ها، در یک نگاه",
     liveStats: "خلاصه‌ی وضعیت برد",
     overviewTitle: "وضعیت پروژه",
-    overviewDescription: "کارت‌ها را در مسیر انجام تا تکمیل دنبال کنید.",
+    overviewDescription: "تسک‌ها را در مسیر انجام تا تکمیل دنبال کنید.",
     completed: "پیشرفت کلی",
-    totalCards: "همه‌ی کارت‌ها",
+    totalCards: "همه‌ی تسک‌ها",
     acrossStages: "در همه‌ی ستون‌ها",
-    movingNow: "کارت‌های در جریان",
-    completedCards: "کارت‌های انجام‌شده",
-    cardsByStage: "تعداد کارت‌ها در هر ستون",
-    distribution: "تعداد کارت‌ها در هر ستون",
+    movingNow: "تسک‌های در جریان",
+    completedCards: "تسک‌های انجام‌شده",
+    cardsByStage: "تعداد تسک‌ها در هر ستون",
+    distribution: "تعداد تسک‌ها در هر ستون",
     boardSummary: "آمار برد",
     boardLabel: "برد کانبان",
     boardTips: "راهنمای استفاده از برد",
-    moveTip: "برای جابه‌جایی، کارت را بکشید یا از منوی کنارش استفاده کنید.",
-    renameTip: "برای تغییر نام ستون، مداد را بزنید و کلید اینتر را فشار دهید.",
+    moveTip: "تسک‌ها را با کشیدن جابه‌جا کنید.",
+    renameTip: "از منوی ستون، تغییر نام را انتخاب کنید.",
     scrollHint: "برای دیدن همه‌ی ستون‌ها، به چپ و راست پیمایش کنید.",
     columnName: "نام ستون",
-    emptyHint: "کارت‌ها را به این ستون بکشید.",
-    titleLabel: "عنوان کارت",
-    detailsLabel: "جزئیات کارت",
-    titlePlaceholder: "عنوان کارت را وارد کنید",
-    detailsPlaceholder: "توضیحات را اضافه کنید (اختیاری)",
+    emptyHint: "اولین تسک را اضافه کنید.",
+    titleLabel: "عنوان تسک",
+    detailsLabel: "جزئیات تسک",
+    titlePlaceholder: "عنوان تسک را وارد کنید",
+    detailsPlaceholder: "توضیحات را بنویسید (اختیاری)",
     cancel: "لغو",
-    addCard: "افزودن کارت",
-    addColumn: "افزودن ستون",
+    addCard: "افزودن تسک",
+    addColumn: "ستون جدید",
     newColumnTitle: "ستون جدید",
-    moveCardTitle: "جابه‌جایی کارت",
+    moveCardTitle: "جابه‌جایی تسک",
     languageLabel: "زبان رابط کاربری",
     darkMode: "تیره",
     lightMode: "روشن",
     switchToDark: "تغییر به حالت تیره",
     switchToLight: "تغییر به حالت روشن",
     additionalInsights: "نمودارهای تکمیلی",
-    bottomChartsKicker: "تحلیل کارت‌ها",
-    completionChartTitle: "کارت‌های انجام‌شده و باقی‌مانده",
-    completionChartDescription: "سهم کارت‌های انجام‌شده از کل کارت‌ها",
+    bottomChartsKicker: "تحلیل تسک‌ها",
+    completionChartTitle: "تسک‌های انجام‌شده و باقی‌مانده",
+    completionChartDescription: "سهم تسک‌های انجام‌شده از کل تسک‌ها",
     doneLegend: "انجام‌شده",
     remainingLegend: "باقی‌مانده",
     stageShareTitle: "سهم هر ستون",
-    stageShareDescription: "درصد و تعداد کارت‌ها در هر ستون",
+    stageShareDescription: "درصد و تعداد تسک‌ها در هر ستون",
     completionMixAria: (done, remaining) => "انجام‌شده: " + new Intl.NumberFormat("fa-IR").format(done) + "؛ باقی‌مانده: " + new Intl.NumberFormat("fa-IR").format(remaining),
-    stageShareAria: (summary) => "سهم کارت‌ها به تفکیک ستون: " + summary,
-    shareChartLabel: (count, share) => new Intl.NumberFormat("fa-IR").format(share) + "٪ · " + new Intl.NumberFormat("fa-IR").format(count) + " کارت",
-    cardCount: (count) => new Intl.NumberFormat("fa-IR").format(count) + " کارت",
+    stageShareAria: (summary) => "سهم تسک‌ها به تفکیک ستون: " + summary,
+    shareChartLabel: (count, share) => new Intl.NumberFormat("fa-IR").format(share) + "٪ · " + new Intl.NumberFormat("fa-IR").format(count) + " تسک",
+    cardCount: (count) => new Intl.NumberFormat("fa-IR").format(count) + " تسک",
     renameColumn: (title) => "تغییر نام " + title,
     deleteColumn: (title) => "حذف ستون " + title,
     confirmDeleteColumn: (title) => "ستون «" + title + "» حذف شود؟",
-    moveCardsBeforeDelete: "برای حذف ستون، کارت‌های آن را ابتدا جابه‌جا کنید.",
+    moveCardsBeforeDelete: "برای حذف ستون، تسک‌های آن را ابتدا جابه‌جا کنید.",
     cannotDeleteLastColumn: "برد باید دست‌کم یک ستون داشته باشد.",
-    moveCard: (title) => "جابه‌جایی کارت " + title,
+    moveCard: (title) => "جابه‌جایی تسک " + title,
     moveTo: (title) => "انتقال به " + title,
-    deleteCard: (title) => "حذف کارت " + title,
-    addCardTo: (title) => "افزودن کارت به " + title,
+    deleteCard: (title) => "حذف تسک " + title,
+    addCardTo: (title) => "افزودن تسک به " + title,
     formatNumber: (value) => new Intl.NumberFormat("fa-IR").format(value),
     percentage: (value) => new Intl.NumberFormat("fa-IR").format(value) + "٪",
     completionAria: (value) => "پیشرفت کلی: " + new Intl.NumberFormat("fa-IR").format(value) + " درصد",
-    completedOf: (done, total) => new Intl.NumberFormat("fa-IR").format(done) + " از " + new Intl.NumberFormat("fa-IR").format(total) + " کارت",
-    chartTotal: (total) => new Intl.NumberFormat("fa-IR").format(total) + " کارت",
-    chartSummary: (summary) => "تعداد کارت‌ها در ستون‌ها: " + summary,
-    cardsAcrossColumns: (cards, columns) => new Intl.NumberFormat("fa-IR").format(cards) + " کارت در " + new Intl.NumberFormat("fa-IR").format(columns) + " ستون",
+    completedOf: (done, total) => new Intl.NumberFormat("fa-IR").format(done) + " از " + new Intl.NumberFormat("fa-IR").format(total) + " تسک",
+    chartTotal: (total) => new Intl.NumberFormat("fa-IR").format(total) + " تسک",
+    chartSummary: (summary) => "تعداد تسک‌ها در ستون‌ها: " + summary,
+    cardsAcrossColumns: (cards, columns) => new Intl.NumberFormat("fa-IR").format(cards) + " تسک در " + new Intl.NumberFormat("fa-IR").format(columns) + " ستون",
     filtersLabel: "جست‌وجو و فیلتر",
-    searchCards: "جست‌وجوی کارت‌ها",
-    searchPlaceholder: "عنوان، توضیحات یا برچسب را جست‌وجو کنید",
+    searchCards: "جست‌وجوی تسک‌ها",
+    searchPlaceholder: "جست‌وجو در تسک‌ها...",
     stageFilter: "وضعیت",
     allStages: "همه‌ی وضعیت‌ها",
     priorityFilter: "اولویت",
@@ -217,16 +227,17 @@ const copyByLanguage: Record<Language, Copy> = {
     priorityLow: "کم",
     priorityMedium: "متوسط",
     priorityHigh: "زیاد",
-    dueDateFilter: "موعد",
-    allDueDates: "همه‌ی موعدها",
+    dueDateFilter: "سررسید",
+    allDueDates: "سررسید",
     overdueOnly: "عقب‌افتاده",
     clearFilters: "پاک‌کردن فیلترها",
-    resultsCount: (visible, total) => new Intl.NumberFormat("fa-IR").format(visible) + " از " + new Intl.NumberFormat("fa-IR").format(total) + " کارت",
-    noMatchingCards: "کارتی با این فیلترها پیدا نشد.",
-    savedLocally: "تغییرات در این مرورگر ذخیره شد",
-    storageUnavailable: "ذخیره‌سازی در مرورگر در دسترس نیست",
+    resultsCount: (visible, total) => new Intl.NumberFormat("fa-IR").format(visible) + " از " + new Intl.NumberFormat("fa-IR").format(total) + " تسک",
+    noMatchingCards: "تسکی با این فیلترها پیدا نشد.",
+    saving: "در حال ذخیره...",
+    saveFailed: "ذخیره نشد؛ تغییرات شما هنوز ثبت نشده است.",
+    retrySave: "تلاش دوباره",
     openCardDetails: (title) => "ویرایش جزئیات " + title,
-    cardDetailsTitle: "جزئیات کارت",
+    cardDetailsTitle: "جزئیات تسک",
     saveChanges: "ذخیره‌ی تغییرات",
     closeDialog: "بستن",
     priorityLabel: "اولویت",
@@ -234,17 +245,17 @@ const copyByLanguage: Record<Language, Copy> = {
     labelsLabel: "برچسب‌ها",
     labelsPlaceholder: "مثلاً: طراحی، فوری",
     labelsHelp: "برچسب‌ها را با ویرگول جدا کنید.",
-    checklistLabel: "فهرست کارها",
-    checklistPlaceholder: "یک کار به فهرست اضافه کنید",
+    checklistLabel: "فهرست تسک‌ها",
+    checklistPlaceholder: "یک تسک به فهرست اضافه کنید",
     addChecklistItem: "افزودن",
     removeChecklistItem: (title) => "حذف مورد " + title,
     checklistProgress: (done, total) => "فهرست: " + new Intl.NumberFormat("fa-IR").format(done) + " از " + new Intl.NumberFormat("fa-IR").format(total),
-    overdueTag: "عقب‌افتاده",
+    overdueTag: "گذشته از موعد",
     assigneesLabel: "اعضای مسئول",
     assigneesHelp: "یک یا چند عضو تیم را انتخاب کنید.",
     noAssigneesSelected: "هنوز عضوی انتخاب نشده است.",
     assignedTo: (names) => "مسئولان: " + names.join("، "),
-    footerHint: "وضعیت کارها را شفاف نگه دارید و گام بعدی را مشخص کنید.",
+    footerHint: "تسک‌ها را با کشیدن جابه‌جا کنید.",
   },
   en: {
     breadcrumb: "YOUR WORKSPACE  /  PROJECTS",
@@ -329,8 +340,9 @@ const copyByLanguage: Record<Language, Copy> = {
     clearFilters: "Clear filters",
     resultsCount: (visible, total) => visible + " of " + total + " cards",
     noMatchingCards: "No cards match these filters.",
-    savedLocally: "Changes saved in this browser",
-    storageUnavailable: "Browser storage is unavailable",
+    saving: "Saving changes...",
+    saveFailed: "Save failed; these changes are not on the server yet",
+    retrySave: "Retry saving",
     openCardDetails: (title) => "Edit details for " + title,
     cardDetailsTitle: "Card details",
     saveChanges: "Save changes",
@@ -362,10 +374,10 @@ const defaultColumnTitles: Record<string, string> = {
 };
 
 const persianColumnTitles: Record<string, string> = {
-  backlog: "کارهای آینده",
-  "up-next": "در صف انجام",
+  backlog: "تسک‌های آینده",
+  "up-next": "آمادهٔ شروع",
   "in-progress": "در حال انجام",
-  review: "بازبینی",
+  review: "در انتظار بررسی",
   done: "انجام‌شده",
 };
 
@@ -382,16 +394,6 @@ const persianSampleCards: Record<string, { title: string; details: string }> = {
 
 const sampleCardDefaults = Object.fromEntries(createInitialBoard().cards.map((card) => [card.id, card]));
 
-function seedSampleAssigneesIfMissing(board: BoardState): BoardState {
-  return {
-    ...board,
-    cards: board.cards.map((card) => {
-      const assigneeIds = sampleCardDefaults[card.id]?.assigneeIds;
-      if (!assigneeIds || card.assigneeIds !== undefined) return card;
-      return { ...card, assigneeIds: [...assigneeIds] };
-    }),
-  };
-}
 const persianSampleMetadata: Record<string, { labels: string[]; checklist: Record<string, string> }> = {
   brief: { labels: ["عرضه", "محتوا"], checklist: { "brief-copy": "هماهنگ‌کردن پیام صفحه‌ی اصلی", "brief-review": "بازبینی متن نهایی" } },
   research: { labels: ["پژوهش"], checklist: { "research-themes": "دسته‌بندی نکته‌های تکراری", "research-summary": "خلاصه‌کردن نیازهای مشتریان" } },
@@ -418,23 +420,6 @@ function displayCardMetadata(card: BoardCard, language: Language) {
   };
 }
 
-function seedSampleMetadataIfMissing(board: BoardState): BoardState {
-  return {
-    ...board,
-    cards: board.cards.map((card) => {
-      const sample = sampleCardDefaults[card.id];
-      if (!sample || card.title !== sample.title || card.details !== sample.details ||
-        card.priority !== undefined || card.dueDate !== undefined || card.labels !== undefined || card.checklist !== undefined) return card;
-      return {
-        ...card,
-        priority: sample.priority,
-        dueDate: sample.dueDate,
-        labels: sample.labels ? [...sample.labels] : [],
-        checklist: sample.checklist?.map((item) => ({ ...item })) ?? [],
-      };
-    }),
-  };
-}
 
 
 function displayColumnTitle(column: BoardColumn, language: Language) {
@@ -462,16 +447,10 @@ function DashboardIcon() {
 function TeamNavigationIcon() {
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" /><path d="M3.5 19c.2-3 2.1-4.8 5.5-4.8s5.3 1.8 5.5 4.8M16 5.6a2.6 2.6 0 0 1 0 5.1m1.2 3.8c2.1.5 3.2 2 3.3 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
 }
-function BoardMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3.5" y="4" width="5" height="16" rx="1.5" stroke="white" strokeWidth="1.5" />
-      <rect x="10" y="4" width="5" height="10" rx="1.5" stroke="white" strokeWidth="1.5" />
-      <rect x="16.5" y="4" width="4" height="13" rx="1.5" stroke="white" strokeWidth="1.5" />
-    </svg>
-  );
-}
 
+function AssistantIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 2.8 2 6.2 6.2 2-6.2 2-2 6.2-2-6.2-6.2-2 6.2-2zM19.5 15.5l1.1 2.9 2.9 1.1-2.9 1.1-1.1 2.9-1.1-2.9-2.9-1.1 2.9-1.1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>;
+}
 function PencilIcon() {
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L19 8.4a2.1 2.1 0 0 0-3-3L5.2 16.2 4 20Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
@@ -508,7 +487,7 @@ function isCardOverdue(card: BoardCard, today: string) {
   return Boolean(card.dueDate && card.dueDate < today && card.columnId !== "done");
 }
 function formatDueDate(value: string, language: Language) {
-  return new Intl.DateTimeFormat(language === "fa" ? "fa-IR" : "en-US", { dateStyle: "medium" }).format(new Date(value + "T00:00:00"));
+  return new Intl.DateTimeFormat(language === "fa" ? "fa-IR" : "en-US", { month: "short", day: "numeric" }).format(new Date(value + "T00:00:00"));
 }
 function priorityText(priority: CardPriority, copy: Copy) {
   return priority === "high" ? copy.priorityHigh : priority === "medium" ? copy.priorityMedium : copy.priorityLow;
@@ -537,7 +516,7 @@ function CardDetailsModal({ card, members, language, copy, onClose, onSave }: {
   function addChecklist() {
     const text = newItem.trim();
     if (!text) return;
-    setChecklist((items) => [...items, { id: "check-" + Date.now() + "-" + Math.random().toString(36).slice(2), text, done: false }]);
+    setChecklist((items) => [...items, { id: createEntityId("check"), text, done: false }]);
     setNewItem("");
   }
   function save(event: FormEvent<HTMLFormElement>) {
@@ -617,6 +596,7 @@ function CardDetailsModal({ card, members, language, copy, onClose, onSave }: {
   );
 }
 function ColumnHeading({
+  language,
   displayTitle,
   count,
   canDelete,
@@ -629,6 +609,7 @@ function ColumnHeading({
   onRename,
   onCancelRename,
 }: {
+  language: Language;
   displayTitle: string;
   count: number;
   canDelete: boolean;
@@ -642,17 +623,25 @@ function ColumnHeading({
   onCancelRename: () => void;
 }) {
   const [draft, setDraft] = useState(displayTitle);
+  const finishedRef = useRef(false);
+
+  function finishEdit(save: boolean) {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (save) onRename(draft.trim() || displayTitle);
+    else { setDraft(displayTitle); onCancelRename(); }
+  }
 
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onRename(draft);
+    finishEdit(true);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
-      setDraft(displayTitle);
-      onCancelRename();
+      event.preventDefault();
+      finishEdit(false);
     }
   }
 
@@ -668,6 +657,7 @@ function ColumnHeading({
               className="rename-input"
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
+              onBlur={() => finishEdit(true)}
               value={draft}
             />
           </form>
@@ -677,9 +667,9 @@ function ColumnHeading({
         <span className="count" aria-label={copy.cardCount(count)}>{copy.formatNumber(count)}</span>
       </div>
       {!editing && (
-        <div className="column-actions">
-          <button className="icon-button" type="button" aria-label={copy.renameColumn(displayTitle)} onClick={() => { setDraft(displayTitle); onStartRename(); }}>
-            <PencilIcon />
+        <details className="column-actions-menu"><summary aria-label={(language === "fa" ? "عملیات ستون " : "Column actions for ") + displayTitle}>···</summary><div className="column-action-options">
+          <button className="icon-button" type="button" aria-label={copy.renameColumn(displayTitle)} onClick={() => { finishedRef.current = false; setDraft(displayTitle); onStartRename(); }}>
+            <PencilIcon /><span>{copy.renameColumn(displayTitle)}</span>
           </button>
           <button
             className="icon-button delete-column"
@@ -689,24 +679,48 @@ function ColumnHeading({
             disabled={!canDelete}
             onClick={onDelete}
           >
-            <TrashIcon />
+            <TrashIcon /><span>{copy.deleteColumn(displayTitle)}</span>
           </button>
-        </div>
+        </div></details>
       )}
     </div>
   );
 }
 
-export function KanbanBoard() {
-  const [board, setBoard] = useState<BoardState>(createInitialBoard);
-  const [teamDirectory, setTeamDirectory] = useState<TeamDirectory>(createInitialTeamDirectory);
-  const [teamDirectoryLoaded, setTeamDirectoryLoaded] = useState(false);
-  const [activeView, setActiveView] = useState<"dashboard" | "team-members">("dashboard");
+type KanbanBoardProps = {
+  initialBoard: BoardState;
+  initialProfile?: UserProfile | null;
+  initialTeamDirectory: TeamDirectory;
+  onLogout?: () => void | Promise<void>;
+  isLoggingOut?: boolean;
+};
+
+type SaveState = "saved" | "saving" | "error";
+type StateUpdate<T> = T | ((current: T) => T);
+
+export function KanbanBoard({ initialBoard, initialTeamDirectory, initialProfile, onLogout, isLoggingOut = false }: KanbanBoardProps) {
+  const [board, setBoardState] = useState<BoardState>(initialBoard);
+  const [teamDirectory, setTeamDirectoryState] = useState<TeamDirectory>(initialTeamDirectory);
+  const boardRef = useRef(initialBoard);
+  const teamDirectoryRef = useRef(initialTeamDirectory);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const boardRevisionRef = useRef(0);
+  const teamRevisionRef = useRef(0);
+  const boardSaveFailedRef = useRef(false);
+  const teamSaveFailedRef = useRef(false);
+  const [boardSaveState, setBoardSaveState] = useState<SaveState>("saved");
+  const [teamSaveState, setTeamSaveState] = useState<SaveState>("saved");
+  const [activeView, setActiveView] = useState<"dashboard" | "team-members" | "profile" | "reports">("dashboard");
+  const [profile, setProfile] = useState<UserProfile | null>(initialProfile ?? null);
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const sidebarCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [sidebarFocused, setSidebarFocused] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantBusy, setAssistantBusy] = useState(false);
   const [language, setLanguage] = useState<Language>("fa");
   const [theme, setTheme] = useState<Theme>("dark");
-  const [boardLoaded, setBoardLoaded] = useState(false);
-  const [storageUnavailable, setStorageUnavailable] = useState(false);
-  const [teamStorageUnavailable, setTeamStorageUnavailable] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
@@ -717,74 +731,129 @@ export function KanbanBoard() {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
   const copy = copyByLanguage[language];
+  const sidebarExpanded = assistantOpen || sidebarPinned || sidebarHovered || sidebarFocused;
+
+  useEffect(() => () => {
+    if (sidebarCollapseTimer.current) clearTimeout(sidebarCollapseTimer.current);
+  }, []);
+
+  function canLeaveProfile() {
+    return !profileDirty || window.confirm(language === "fa" ? "تغییرات پروفایل ذخیره نشده‌اند. از این صفحه خارج شوید؟" : "Your profile changes are not saved. Leave this page?");
+  }
+
+  function navigate(view: "dashboard" | "team-members" | "profile" | "reports") {
+    if (view === activeView || canLeaveProfile()) setActiveView(view);
+  }
+
+  async function retryProfile() {
+    try { setProfile(await fetchProfile()); } catch { setProfile(null); }
+  }
+
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    function closeMenus(event: PointerEvent) {
+      document.querySelectorAll<HTMLDetailsElement>(".task-actions-menu[open], .column-actions-menu[open]").forEach((menu) => {
+        if (!menu.contains(event.target as Node)) menu.open = false;
+      });
+    }
+    document.addEventListener("pointerdown", closeMenus);
+    return () => document.removeEventListener("pointerdown", closeMenus);
+  }, []);
+
+  function enqueueSave<T>(action: () => Promise<T>): Promise<T> {
+    const queuedAction = saveQueueRef.current.catch(() => undefined).then(action);
+    saveQueueRef.current = queuedAction.then(() => undefined, () => undefined);
+    return queuedAction;
+  }
+
+  function scheduleBoardSave(snapshot: BoardState) {
+    const revision = ++boardRevisionRef.current;
+    boardSaveFailedRef.current = false;
+    setBoardSaveState("saving");
+    enqueueSave(async () => {
       try {
-        const stored = window.localStorage.getItem("kanban-codex.board.v1");
-        if (stored) {
-          const parsed: unknown = JSON.parse(stored);
-          if (isBoardState(parsed)) setBoard(seedSampleAssigneesIfMissing(seedSampleMetadataIfMissing(parsed)));
+        const saved = await saveBoardState(snapshot);
+        if (revision === boardRevisionRef.current) {
+          boardRef.current = saved;
+          setBoardState(saved);
+          boardSaveFailedRef.current = false;
+          setBoardSaveState("saved");
         }
       } catch {
-        setStorageUnavailable(true);
-      } finally {
-        setBoardLoaded(true);
+        if (revision === boardRevisionRef.current) {
+          boardSaveFailedRef.current = true;
+          setBoardSaveState("error");
+        }
       }
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    });
+  }
+
+  function scheduleTeamSave(snapshot: TeamDirectory) {
+    const revision = ++teamRevisionRef.current;
+    teamSaveFailedRef.current = false;
+    setTeamSaveState("saving");
+    enqueueSave(async () => {
       try {
-        const stored = window.localStorage.getItem("kanban-codex.teams.v1");
-        if (stored) {
-          const parsed: unknown = JSON.parse(stored);
-          if (isTeamDirectory(parsed)) setTeamDirectory(parsed);
-          else setTeamStorageUnavailable(true);
+        const saved = await saveTeamDirectory(snapshot);
+        if (revision === teamRevisionRef.current) {
+          teamDirectoryRef.current = saved;
+          setTeamDirectoryState(saved);
+          teamSaveFailedRef.current = false;
+          setTeamSaveState("saved");
         }
       } catch {
-        setTeamStorageUnavailable(true);
-      } finally {
-        setTeamDirectoryLoaded(true);
+        if (revision === teamRevisionRef.current) {
+          teamSaveFailedRef.current = true;
+          setTeamSaveState("error");
+        }
       }
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-  useEffect(() => {
-    if (!boardLoaded) return;
-    const timeoutId = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem("kanban-codex.board.v1", JSON.stringify(board));
-        setStorageUnavailable(false);
-      } catch {
-        setStorageUnavailable(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [board, boardLoaded]);
-  useEffect(() => {
-    if (!teamDirectoryLoaded) return;
-    const timeoutId = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem("kanban-codex.teams.v1", JSON.stringify(teamDirectory));
-        setTeamStorageUnavailable(false);
-      } catch {
-        setTeamStorageUnavailable(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [teamDirectory, teamDirectoryLoaded]);
+    });
+  }
+
+  function updateBoard(update: StateUpdate<BoardState>) {
+    const next = typeof update === "function" ? update(boardRef.current) : update;
+    if (next === boardRef.current) return;
+    boardRef.current = next;
+    setBoardState(next);
+    scheduleBoardSave(next);
+  }
+
+  function updateTeamDirectory(update: StateUpdate<TeamDirectory>) {
+    const next = typeof update === "function" ? update(teamDirectoryRef.current) : update;
+    if (next === teamDirectoryRef.current) return;
+    teamDirectoryRef.current = next;
+    setTeamDirectoryState(next);
+    scheduleTeamSave(next);
+  }
+
+  function retryBoardSave() { scheduleBoardSave(boardRef.current); }
+  function retryTeamSave() { scheduleTeamSave(teamDirectoryRef.current); }
+
+  function sendAssistantMessage(question: string, history: AIChatMessage[]): Promise<AIChatResult> {
+    return enqueueSave(async () => {
+      if (boardSaveFailedRef.current || teamSaveFailedRef.current) throw new PendingSaveError();
+      const result = await sendAIChat(question, history);
+      boardRevisionRef.current += 1;
+      boardRef.current = result.board;
+      setBoardState(result.board);
+      boardSaveFailedRef.current = false;
+      setBoardSaveState("saved");
+      return result;
+    });
+  }
   useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = language === "fa" ? "rtl" : "ltr";
     document.documentElement.dataset.theme = theme;
     document.title = activeView === "dashboard"
       ? language === "fa" ? "کانبان کدکس — برد پروژه" : "Kanban Codex — Project board"
+      : activeView === "reports" ? language === "fa" ? "کانبان کدکس — گزارشات" : "Kanban Codex — Reports"
+      : activeView === "profile" ? language === "fa" ? "کانبان کدکس — پروفایل من" : "Kanban Codex — My profile"
       : language === "fa" ? "کانبان کدکس — اعضای تیم" : "Kanban Codex — Team members";
   }, [activeView, language, theme]);
   const today = localDateKey();
   const normalizedSearch = searchTerm.trim().normalize("NFKC").toLocaleLowerCase(language);
   const filteredCards = useMemo(() => board.cards.filter((card) => {
+    if (activeView === "reports") return true;
     if (stageFilter !== "all" && card.columnId !== stageFilter) return false;
     if (priorityFilter !== "all" && card.priority !== priorityFilter) return false;
     if (dueFilter === "overdue" && !isCardOverdue(card, today)) return false;
@@ -792,7 +861,7 @@ export function KanbanBoard() {
     const displayed = displayCardContent(card, language);
     const displayedMetadata = displayCardMetadata(card, language);
     return [card.title, card.details, displayed.title, displayed.details, ...displayedMetadata.labels, ...displayedMetadata.checklist.map((item) => item.text)].join(" ").normalize("NFKC").toLocaleLowerCase(language).includes(normalizedSearch);
-  }), [board.cards, dueFilter, language, normalizedSearch, priorityFilter, stageFilter, today]);
+  }), [activeView, board.cards, dueFilter, language, normalizedSearch, priorityFilter, stageFilter, today]);
   const filtersActive = Boolean(normalizedSearch) || stageFilter !== "all" || priorityFilter !== "all" || dueFilter !== "all";
   const editingCard = editingCardId ? board.cards.find((card) => card.id === editingCardId) ?? null : null;
   const totalCards = filteredCards.length;
@@ -817,9 +886,9 @@ export function KanbanBoard() {
     return displayColumnTitle(column, language) + " " + copy.shareChartLabel(count, share);
   }).join(language === "fa" ? "، " : ", ");
   function handleAddColumn() {
-    const columnId = "column-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-    setBoard((current) => addColumn(current, columnId, copy.newColumnTitle));
-    setEditingColumnId(columnId);
+    const columnId = createEntityId("column");
+    updateBoard((current) => addColumn(current, columnId, copy.newColumnTitle));
+    setEditingColumnId(null);
     setSearchTerm("");
     setStageFilter("all");
     setPriorityFilter("all");
@@ -834,12 +903,12 @@ export function KanbanBoard() {
     }
     const title = displayColumnTitle(column, language);
     if (!window.confirm(copy.confirmDeleteColumn(title))) return;
-    setBoard((current) => deleteColumn(current, column.id));
+    updateBoard((current) => deleteColumn(current, column.id));
     if (stageFilter === column.id) setStageFilter("all");
   }
 
   function finishRename(columnId: string, title: string) {
-    setBoard((current) => renameColumn(current, columnId, title));
+    updateBoard((current) => renameColumn(current, columnId, title));
     setEditingColumnId(null);
   }
 
@@ -850,19 +919,19 @@ export function KanbanBoard() {
     const title = String(formData.get("title") ?? "");
     const details = String(formData.get("details") ?? "");
     if (!title.trim()) return;
-    setBoard((current) => addCard(current, columnId, title, details, `card-${Date.now()}-${Math.random().toString(36).slice(2)}`));
+    updateBoard((current) => addCard(current, columnId, title, details, createEntityId("card")));
     setAddingCardTo(null);
   }
 
   function saveCardDetails(updates: CardUpdate) {
     if (!editingCardId) return;
-    setBoard((current) => updateCard(current, editingCardId, updates));
+    updateBoard((current) => updateCard(current, editingCardId, updates));
     setEditingCardId(null);
   }
   function dropCard(event: React.DragEvent<HTMLElement>, columnId: string) {
     event.preventDefault();
     const cardId = event.dataTransfer.getData("text/plain") || draggingCardId;
-    if (cardId) setBoard((current) => moveCard(current, cardId, columnId));
+    if (cardId) updateBoard((current) => moveCard(current, cardId, columnId));
     setHoveredColumnId(null);
     setDraggingCardId(null);
   }
@@ -872,14 +941,14 @@ export function KanbanBoard() {
       ? { ...team, memberIds: team.memberIds.filter((id) => id !== memberId) }
       : team);
     const stillInAnotherTeam = nextTeams.some((team) => team.memberIds.includes(memberId));
-    setTeamDirectory({
+    updateTeamDirectory({
       teams: nextTeams,
       members: stillInAnotherTeam
         ? teamDirectory.members
         : teamDirectory.members.filter((member) => member.id !== memberId),
     });
     if (!stillInAnotherTeam) {
-      setBoard((current) => ({
+      updateBoard((current) => ({
         ...current,
         cards: current.cards.map((card) => {
           if (!card.assigneeIds?.includes(memberId)) return card;
@@ -893,29 +962,51 @@ export function KanbanBoard() {
   function deleteEmptyTeam(teamId: string) {
     const team = teamDirectory.teams.find((item) => item.id === teamId);
     if (!team || team.memberIds.length > 0) return false;
-    setTeamDirectory((current) => ({ ...current, teams: current.teams.filter((item) => item.id !== teamId) }));
+    updateTeamDirectory((current) => ({ ...current, teams: current.teams.filter((item) => item.id !== teamId) }));
     return true;
   }
   return (
-    <div className="shell" dir={language === "fa" ? "rtl" : "ltr"}>
-      <aside className="sidebar" dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
-        <div className="sidebar-brand brand">
-          <span className="brand-mark"><BoardMark /></span>
-          <span className="brand-name">kanban</span>
+    <div className="shell workspace" data-sidebar-expanded={sidebarExpanded} data-chat-open={assistantOpen} dir={language === "fa" ? "rtl" : "ltr"} onKeyDown={(event) => {
+      if (event.key === "Escape" && event.target instanceof Element) {
+        const menu = event.target.closest<HTMLDetailsElement>("details[open]");
+        if (menu) { menu.open = false; menu.querySelector<HTMLElement>("summary")?.focus(); }
+      }
+    }}>
+      <aside className="sidebar"
+        onPointerEnter={(event) => {
+          if (sidebarCollapseTimer.current) clearTimeout(sidebarCollapseTimer.current);
+          if (event.pointerType === "mouse") setSidebarHovered(window.matchMedia("(min-width: 681px)").matches);
+        }}
+        onPointerLeave={() => {
+          // Let a click outside the menu finish before its layout moves.
+          sidebarCollapseTimer.current = setTimeout(() => setSidebarHovered(false), 180);
+        }}
+        onPointerDownCapture={() => setSidebarFocused(false)}
+        onFocusCapture={(event) => { if (event.target instanceof Element && event.target.matches(":focus-visible")) setSidebarFocused(true); }}
+        onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSidebarFocused(false); }}
+        dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
+        <div className="sidebar-header">
+        <div className="sidebar-brand brand"><span className="auth-brand-mark" aria-hidden="true"><i /><i /><i /></span><span className="brand-name">kanban</span></div>
+          <button className="sidebar-toggle" type="button" aria-controls="workspace-navigation" aria-expanded={sidebarExpanded} aria-pressed={sidebarPinned} aria-label={language === "fa" ? sidebarPinned ? "جمع‌شدن خودکار منو" : "باز نگه داشتن منو" : sidebarPinned ? "Unpin navigation" : "Pin navigation"} title={language === "fa" ? sidebarPinned ? "جمع‌شدن خودکار منو" : "باز نگه داشتن منو" : sidebarPinned ? "Unpin navigation" : "Pin navigation"} onClick={() => setSidebarPinned((pinned) => !pinned)}><MenuIcon /></button>
         </div>
-        <nav className="sidebar-nav" aria-label={language === "fa" ? "منوی اصلی" : "Main navigation"}>
-          <button className={"sidebar-nav-item" + (activeView === "dashboard" ? " active" : "")} type="button" aria-current={activeView === "dashboard" ? "page" : undefined} onClick={() => setActiveView("dashboard")}>
-            <DashboardIcon /><span className="sidebar-nav-label">{language === "fa" ? "داشبورد" : "Dashboard"}</span>
-          </button>
-          <button className={"sidebar-nav-item" + (activeView === "team-members" ? " active" : "")} type="button" aria-current={activeView === "team-members" ? "page" : undefined} onClick={() => setActiveView("team-members")}>
-            <TeamNavigationIcon /><span className="sidebar-nav-label">{language === "fa" ? "اعضای تیم" : "Team members"}</span>
-          </button>
+        <p className="sidebar-caption">{language === "fa" ? "فضای کاری" : "Workspace"}</p>
+        <nav id="workspace-navigation" className="sidebar-nav" aria-label={language === "fa" ? "منوی اصلی" : "Main navigation"}>
+          <button className={"sidebar-nav-item" + (activeView === "profile" ? " active" : "")} type="button" aria-label={language === "fa" ? "پروفایل من" : "My profile"} title={language === "fa" ? "پروفایل من" : "My profile"} aria-current={activeView === "profile" ? "page" : undefined} onClick={() => navigate("profile")}><ProfileIcon /><span className="sidebar-nav-label">{language === "fa" ? "پروفایل من" : "My profile"}</span></button>
+          <button className={"sidebar-nav-item" + (activeView === "dashboard" ? " active" : "")} type="button" aria-label={language === "fa" ? "برد پروژه" : "Project board"} title={language === "fa" ? "برد پروژه" : "Project board"} aria-current={activeView === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}><DashboardIcon /><span className="sidebar-nav-label">{language === "fa" ? "برد پروژه" : "Project board"}</span></button>
+          <button className={"sidebar-nav-item" + (activeView === "reports" ? " active" : "")} type="button" aria-label={language === "fa" ? "گزارشات" : "Reports"} title={language === "fa" ? "گزارشات" : "Reports"} aria-current={activeView === "reports" ? "page" : undefined} onClick={() => navigate("reports")}><ReportsIcon /><span className="sidebar-nav-label">{language === "fa" ? "گزارشات" : "Reports"}</span></button>
+          <button className={"sidebar-nav-item" + (activeView === "team-members" ? " active" : "")} type="button" aria-label={language === "fa" ? "اعضای تیم" : "Team members"} title={language === "fa" ? "اعضای تیم" : "Team members"} aria-current={activeView === "team-members" ? "page" : undefined} onClick={() => navigate("team-members")}><TeamNavigationIcon /><span className="sidebar-nav-label">{language === "fa" ? "اعضای تیم" : "Team members"}</span></button>
         </nav>
+        <section className="sidebar-assistant-entry" hidden={assistantOpen}><h2><AssistantIcon />{language === "fa" ? "دستیار کانبان" : "Kanban assistant"}</h2><p>{language === "fa" ? "برای ساخت و جابه‌جایی تسک‌ها کمک بگیرید." : "Get help creating and moving cards."}</p>
+          <button className="workspace-primary" type="button" aria-controls="assistant-panel" aria-expanded={assistantOpen} aria-label={language === "fa" ? "دستیار کانبان" : "AI assistant"} onClick={() => setAssistantOpen((open) => !open)}><AssistantIcon /><span>{language === "fa" ? "شروع گفت‌وگو" : "Start a conversation"}</span></button>
+        </section>
+        <AIAssistant open={assistantOpen} language={language} onClose={() => setAssistantOpen(false)} onBusyChange={setAssistantBusy} onSend={sendAssistantMessage} />
+        {onLogout && <button className="logout-button sidebar-logout" type="button" aria-label={language === "fa" ? "خروج از حساب" : "Sign out"} title={language === "fa" ? "خروج از حساب" : "Sign out"} disabled={isLoggingOut} onClick={() => { if (canLeaveProfile()) void onLogout(); }}><LogoutIcon /><span>{isLoggingOut ? (language === "fa" ? "در حال خروج..." : "Signing out...") : (language === "fa" ? "خروج از حساب" : "Sign out")}</span></button>}
       </aside>
       <div className="app-main" dir={language === "fa" ? "rtl" : "ltr"} lang={language}>
-      <header className="topbar">
-        <div className="crumb">{copy.breadcrumb} / {activeView === "dashboard" ? (language === "fa" ? "داشبورد" : "Dashboard") : (language === "fa" ? "اعضای تیم" : "Team members")}</div>
-        <div className="topbar-actions">
+        <header className="topbar">
+          <div className="crumb">{language === "fa" ? "فضای کار" : "Workspace"} / {activeView === "profile" ? language === "fa" ? "پروفایل من" : "My profile" : activeView === "reports" ? language === "fa" ? "گزارشات" : "Reports" : activeView === "team-members" ? language === "fa" ? "اعضای تیم" : "Team members" : copy.projectTitle}</div>
+          <div className="topbar-actions">
+            <button className="account-button" type="button" aria-describedby="current-user-name" aria-label={language === "fa" ? "بازکردن پروفایل من" : "Open my profile"} onClick={() => navigate("profile")}><UserAvatar profile={profile} /><strong id="current-user-name" dir="auto">{profileName(profile)}</strong><span aria-hidden="true">⌄</span></button>
           <button
             className="theme-toggle"
             type="button"
@@ -930,11 +1021,11 @@ export function KanbanBoard() {
             <button className={"language-option" + (language === "fa" ? " active" : "")} type="button" aria-pressed={language === "fa"} onClick={() => setLanguage("fa")}>فارسی</button>
             <button className={"language-option" + (language === "en" ? " active" : "")} type="button" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>English</button>
           </div>
-          <span className="top-dot" aria-hidden="true" />
-        </div>
-      </header>
 
-      <main className="view-content">
+          </div>
+        </header>
+
+      <main className="view-content" aria-busy={assistantBusy} inert={assistantBusy}>
         {activeView === "dashboard" ? (
           <>
       <section className="page-head" aria-labelledby="page-title">
@@ -944,38 +1035,35 @@ export function KanbanBoard() {
             <h1 id="page-title" className="page-title">{copy.projectTitle}</h1>
             <p className="page-subtitle">{copy.subtitle}</p>
           </div>
-          <div className="board-note">
-            <span className="board-note-mark"><BoardMark /></span>
-            {copy.boardNote}
+          <div className="project-actions">
+            <button className="workspace-primary" type="button" onClick={() => setAddingCardTo(stageFilter !== "all" ? stageFilter : board.columns[0]?.id ?? null)}><PlusIcon />{language === "fa" ? "تسک جدید" : "New card"}</button>
+            <button className="workspace-secondary" type="button" onClick={handleAddColumn}><PlusIcon />{copy.addColumn}</button>
+            <div className="member-stack" aria-label={language === "fa" ? "اعضای تیم" : "Team members"}>{teamDirectory.members.slice(0,4).map((member) => <TeamAvatar key={member.id} member={member} />)}<span>{copy.formatNumber(teamDirectory.members.length)} {language === "fa" ? "عضو" : "members"}</span></div>
           </div>
         </div>
       </section>
 
+
       <section className="board-wrap" aria-label={copy.boardLabel}>
-        <section className="board-toolbar" aria-label={copy.filtersLabel}>
+        <section className="board-controlbar" aria-label={copy.filtersLabel} data-save-state={boardSaveState}>
+          <div className="board-summary" role="group" aria-label={copy.boardSummary}>
+            <span className="summary-pill">{copy.formatNumber(totalCards)} {language === "fa" ? "تسک" : "cards"}</span>
+            <span className="summary-pill progress">{copy.formatNumber(inProgressCount)} {language === "fa" ? "در جریان" : "in progress"}</span>
+            <span className="summary-pill review">{copy.formatNumber(cardsByColumn.review?.length ?? 0)} {language === "fa" ? "منتظر بررسی" : "in review"}</span>
+            <span className="summary-pill done">{copy.formatNumber(doneCount)} {language === "fa" ? "انجام‌شده" : "done"}</span>
+            <div className="summary-progress"><span>{language === "fa" ? "پیشرفت" : "Progress"}</span><progress max={100} value={completionPercent} aria-label={copy.completionAria(completionPercent)} /><strong>{copy.percentage(completionPercent)}</strong></div>
+          </div>
           <label className="filter-search"><SearchIcon /><span className="sr-only">{copy.searchCards}</span><input type="search" value={searchTerm} placeholder={copy.searchPlaceholder} onChange={(event) => setSearchTerm(event.target.value)} /></label>
           <div className="filter-controls">
             <label className="filter-control"><span>{copy.stageFilter}</span><select aria-label={copy.stageFilter} value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option value="all">{copy.allStages}</option>{board.columns.map((column) => <option key={column.id} value={column.id}>{displayColumnTitle(column, language)}</option>)}</select></label>
             <label className="filter-control"><span>{copy.priorityFilter}</span><select aria-label={copy.priorityFilter} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as CardPriority | "all")}><option value="all">{copy.allPriorities}</option><option value="high">{copy.priorityHigh}</option><option value="medium">{copy.priorityMedium}</option><option value="low">{copy.priorityLow}</option></select></label>
             <label className="filter-control"><span>{copy.dueDateFilter}</span><select aria-label={copy.dueDateFilter} value={dueFilter} onChange={(event) => setDueFilter(event.target.value as DueFilter)}><option value="all">{copy.allDueDates}</option><option value="overdue">{copy.overdueOnly}</option></select></label>
           </div>
-          <div className="filter-meta"><span className="filter-results" aria-live="polite">{copy.resultsCount(filteredCards.length, board.cards.length)}</span>{boardLoaded && <span className={storageUnavailable ? "storage-status is-unavailable" : "storage-status"} role="status"><span className="storage-status-dot" aria-hidden="true" />{storageUnavailable ? copy.storageUnavailable : copy.savedLocally}</span>}</div>
+          {filtersActive && <span className="filter-results" aria-live="polite">{copy.resultsCount(filteredCards.length, board.cards.length)}</span>}
           {filtersActive && <button className="clear-filters" type="button" onClick={() => { setSearchTerm(""); setStageFilter("all"); setPriorityFilter("all"); setDueFilter("all"); }}>{copy.clearFilters}</button>}
-          <button className="add-column" type="button" onClick={handleAddColumn}><PlusIcon />{copy.addColumn}</button>
         </section>
-        <div className="board-guide" role="note" aria-label={copy.boardTips}>
-          <div className="board-guide-copy">
-            <span className="guide-icon"><MoveIcon /></span>
-            <span>{copy.moveTip}</span>
-            <span className="guide-divider" aria-hidden="true">·</span>
-            <span className="guide-icon guide-icon-rename"><PencilIcon /></span>
-            <span>{copy.renameTip}</span>
-          </div>
-          <div className="scroll-cue">
-            <span>{copy.scrollHint}</span>
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h16m0 0-5-5m5 5-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </div>
-        </div>
+        {boardSaveState === "saving" && <span className="sr-only" role="status">{copy.saving}</span>}
+        {boardSaveState === "error" && <div className="board-save-error" role="alert"><span>{copy.saveFailed}</span><button type="button" onClick={retryBoardSave}>{copy.retrySave}</button></div>}
         <div className="board-grid" style={{ "--column-count": board.columns.length } as CSSProperties}>
           {board.columns.map((column, index) => {
             const cards = cardsByColumn[column.id] ?? [];
@@ -995,6 +1083,7 @@ export function KanbanBoard() {
                 onDrop={(event) => dropCard(event, column.id)}
               >
                 <ColumnHeading
+                  language={language}
                   displayTitle={displayTitle}
                   copy={copy}
                   count={cards.length}
@@ -1027,48 +1116,24 @@ export function KanbanBoard() {
                     >
                       <div className="card-top">
                         <h3 className="card-title">{displayCardContent(card, language).title}</h3>
-                        <div className="card-actions">
-                          <button className="icon-button details-card" type="button" aria-label={copy.openCardDetails(displayCardContent(card, language).title)} title={copy.cardDetailsTitle} onClick={() => setEditingCardId(card.id)}><PencilIcon /></button>
-                          <details className="move-menu">
-                            <summary
-                              className="icon-button move-card"
-                              aria-label={copy.moveCard(displayCardContent(card, language).title)}
-                              title={copy.moveCardTitle}
-                            >
-                              <MoveIcon />
-                            </summary>
-                            <div className="move-options">
-                              {board.columns.filter((target) => target.id !== card.columnId).map((target) => (
-                                <button
-                                  key={target.id}
-                                  className="move-option"
-                                  type="button"
-                                  onClick={(event) => {
-                                    setBoard((current) => moveCard(current, card.id, target.id));
-                                    event.currentTarget.closest("details")?.removeAttribute("open");
-                                  }}
-                                >
-                                  {copy.moveTo(displayColumnTitle(target, language))}
-                                </button>
-                              ))}
-                            </div>
-                          </details>
-                          <button
-                            className="icon-button delete-card"
-                            type="button"
-                            aria-label={copy.deleteCard(displayCardContent(card, language).title)}
-                            onClick={() => setBoard((current) => deleteCard(current, card.id))}
-                          >
-                            <TrashIcon />
-                          </button>
-                        </div>
+                        <details className="task-actions-menu">
+                          <summary aria-label={(language === "fa" ? "عملیات " : "Actions for ") + displayCardContent(card, language).title}>···</summary>
+                          <div className="task-action-options">
+                            <button type="button" aria-label={copy.openCardDetails(displayCardContent(card, language).title)} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setEditingCardId(card.id); }}><PencilIcon />{copy.cardDetailsTitle}</button>
+                            <details className="move-menu">
+                              <summary aria-label={copy.moveCard(displayCardContent(card, language).title)}><MoveIcon />{copy.moveCardTitle}</summary>
+                              <div className="move-options">{board.columns.filter((target) => target.id !== card.columnId).map((target) => <button key={target.id} type="button" onClick={(event) => { updateBoard((current) => moveCard(current, card.id, target.id)); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{copy.moveTo(displayColumnTitle(target, language))}</button>)}</div>
+                            </details>
+                            <button className="delete-card" type="button" aria-label={copy.deleteCard(displayCardContent(card, language).title)} onClick={() => updateBoard((current) => deleteCard(current, card.id))}><TrashIcon />{language === "fa" ? "حذف تسک" : "Delete card"}</button>
+                          </div>
+                        </details>
                       </div>
                       {displayCardContent(card, language).details && <p className="card-details">{displayCardContent(card, language).details}</p>}
                       {(card.priority || card.dueDate || (card.labels?.length ?? 0) > 0 || (card.checklist?.length ?? 0) > 0) && <div className="card-metadata">
                         {card.priority && <span className={"priority-badge priority-" + card.priority}>{priorityText(card.priority, copy)}</span>}
                         {card.dueDate && <span className={isCardOverdue(card, today) ? "card-due is-overdue" : "card-due"}><CalendarIcon />{formatDueDate(card.dueDate, language)}{isCardOverdue(card, today) && <strong>{copy.overdueTag}</strong>}</span>}
-                        {(card.labels?.length ?? 0) > 0 && <div className="card-labels">{card.labels?.map((label) => <span className="card-label" key={label}>{label}</span>)}</div>}
-                        {(card.checklist?.length ?? 0) > 0 && <span className="checklist-summary">{copy.checklistProgress(card.checklist?.filter((item) => item.done).length ?? 0, card.checklist?.length ?? 0)}</span>}
+                        {(card.labels?.length ?? 0) > 0 && <div className="card-labels">{displayCardMetadata(card, language).labels.map((label) => <span className="card-label" key={label}>{label}</span>)}</div>}
+                        {(card.checklist?.length ?? 0) > 0 && <span className="checklist-summary" aria-label={copy.checklistProgress(card.checklist?.filter((item) => item.done).length ?? 0, card.checklist?.length ?? 0)}><svg viewBox="0 0 20 20" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="14" height="14" rx="2" /><path d="m6 10 3 3 5-6" /></svg>{copy.formatNumber(card.checklist?.filter((item) => item.done).length ?? 0)}/{copy.formatNumber(card.checklist?.length ?? 0)}</span>}
                       </div>}
                       {cardAssignedMembers(card, teamDirectory.members).length > 0 && (
                         <div
@@ -1087,7 +1152,7 @@ export function KanbanBoard() {
                       <div className="card-rule" aria-hidden="true" />
                     </article>
                   ))}
-                  {cards.length === 0 && <div className="empty-hint">{filtersActive ? copy.noMatchingCards : copy.emptyHint}</div>}
+                  {cards.length === 0 && <div className="empty-hint">{filtersActive ? copy.noMatchingCards : <><DashboardIcon /><strong>{language === "fa" ? "هنوز تسکی اینجا نیست" : "No cards here yet"}</strong><span>{copy.emptyHint}</span></>}</div>}
                 </div>
 
                 {addingCardTo === column.id ? (
@@ -1115,6 +1180,12 @@ export function KanbanBoard() {
           <span><span className="footer-count">{copy.formatNumber(totalCards)}</span> {copy.cardsAcrossColumns(totalCards, board.columns.length)}</span>
         </footer>
       </section>
+      {editingCard && <CardDetailsModal key={editingCard.id} card={editingCard} members={teamDirectory.members} language={language} copy={copy} onClose={() => setEditingCardId(null)} onSave={saveCardDetails} />}
+          </>
+        ) : activeView === "reports" ? (
+          <section className="reports-page" aria-labelledby="reports-title">
+            <header className="reports-heading"><h1 id="reports-title">{language === "fa" ? "گزارشات" : "Reports"}</h1><p>{language === "fa" ? "نمایی از پیشرفت و توزیع تسک‌های پروژه." : "Project progress and card distribution."}</p></header>
+            <div id="board-analytics">
       <section className="overview" aria-labelledby="overview-title">
         <div className="overview-top">
           <div className="overview-intro">
@@ -1247,14 +1318,17 @@ export function KanbanBoard() {
           </div>
         </section>
       </section>
-      {editingCard && <CardDetailsModal key={editingCard.id} card={editingCard} members={teamDirectory.members} language={language} copy={copy} onClose={() => setEditingCardId(null)} onSave={saveCardDetails} />}
-          </>
+            </div>
+          </section>
+        ) : activeView === "profile" ? (
+          <ProfilePage key={profile?.id ?? "loading"} profile={profile} language={language} onSaved={setProfile} onRetry={() => void retryProfile()} onDirtyChange={setProfileDirty} />
         ) : (
           <TeamMembersPage
             directory={teamDirectory}
             language={language}
-            storageUnavailable={teamStorageUnavailable}
-            onDirectoryChange={setTeamDirectory}
+            saveState={teamSaveState}
+            onRetrySave={retryTeamSave}
+            onDirectoryChange={updateTeamDirectory}
             onRemoveMember={removeMemberFromTeam}
             onDeleteTeam={deleteEmptyTeam}
           />
@@ -1263,4 +1337,18 @@ export function KanbanBoard() {
     </div>
   </div>
   );
+}
+
+function ProfileIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="7" r="4" /><path d="M3.5 21c.4-5 3.3-7.5 8.5-7.5s8.1 2.5 8.5 7.5" /></svg>;
+}
+
+function ReportsIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.7"><path d="M4 20h17M5 16V9m7 7V4m7 12v-6" strokeLinecap="round" /></svg>;
+}
+function MenuIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.7"><path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" /></svg>;
+}
+function LogoutIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.7"><path d="M10 4H4v16h6m3-12 4 4-4 4m-4-4h12" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }

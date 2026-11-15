@@ -1,0 +1,787 @@
+{
+  "schema_version": 2,
+  "storage_engine": "SQLite",
+  "required_pragmas": [
+    "PRAGMA foreign_keys = ON"
+  ],
+  "tables": [
+    {
+      "name": "users",
+      "purpose": "Data owner; MVP seeds one demo user and stores no password.",
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "username": "TEXT NOT NULL UNIQUE",
+        "created_at": "TEXT NOT NULL, UTC ISO-8601"
+      },
+      "constraints": [],
+      "foreign_keys": []
+    },
+    {
+      "name": "user_profiles",
+      "purpose": "Signed-in account display name and optional bounded raster avatar; independent of sample team members and login credentials.",
+      "columns": {
+        "user_id": "TEXT PRIMARY KEY",
+        "first_name": "TEXT NOT NULL DEFAULT ''",
+        "last_name": "TEXT NOT NULL DEFAULT ''",
+        "avatar_data_url": "TEXT NULL"
+      },
+      "constraints": [],
+      "foreign_keys": [
+        {
+          "from": [
+            "user_id"
+          ],
+          "to": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "boards",
+      "purpose": "One board per user.",
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "owner_user_id": "TEXT NOT NULL",
+        "created_at": "TEXT NOT NULL, UTC ISO-8601",
+        "updated_at": "TEXT NOT NULL, UTC ISO-8601"
+      },
+      "constraints": [
+        "UNIQUE(owner_user_id)",
+        "UNIQUE(owner_user_id, id)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "owner_user_id"
+          ],
+          "to": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "RESTRICT"
+        }
+      ]
+    },
+    {
+      "name": "board_columns",
+      "purpose": "Ordered columns belonging to a board.",
+      "columns": {
+        "id": "TEXT NOT NULL",
+        "board_id": "TEXT NOT NULL",
+        "title": "TEXT NOT NULL",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)"
+      },
+      "constraints": [
+        "PRIMARY KEY(board_id, id)",
+        "UNIQUE(board_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "board_id"
+          ],
+          "to": {
+            "table": "boards",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "cards",
+      "purpose": "Ordered cards and their scalar fields. Composite column key prevents cross-board references.",
+      "columns": {
+        "id": "TEXT NOT NULL",
+        "board_id": "TEXT NOT NULL",
+        "column_id": "TEXT NOT NULL",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)",
+        "title": "TEXT NOT NULL",
+        "details": "TEXT NOT NULL DEFAULT ''",
+        "priority": "TEXT NULL CHECK(priority IS NULL OR priority IN ('low','medium','high'))",
+        "due_date": "TEXT NULL, ISO date YYYY-MM-DD",
+        "created_at": "TEXT NOT NULL, UTC ISO-8601",
+        "updated_at": "TEXT NOT NULL, UTC ISO-8601"
+      },
+      "constraints": [
+        "PRIMARY KEY(board_id, id)",
+        "UNIQUE(board_id, column_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "board_id"
+          ],
+          "to": {
+            "table": "boards",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "from": [
+            "board_id",
+            "column_id"
+          ],
+          "to": {
+            "table": "board_columns",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
+          "on_delete": "RESTRICT"
+        }
+      ]
+    },
+    {
+      "name": "card_labels",
+      "purpose": "Ordered free-form label strings; duplicate text is allowed.",
+      "columns": {
+        "card_id": "TEXT NOT NULL",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)",
+        "label": "TEXT NOT NULL",
+        "board_id": "TEXT NOT NULL"
+      },
+      "constraints": [
+        "PRIMARY KEY(board_id, card_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "board_id",
+            "card_id"
+          ],
+          "to": {
+            "table": "cards",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "checklist_items",
+      "purpose": "Ordered checklist entries belonging to a card.",
+      "columns": {
+        "id": "TEXT NOT NULL",
+        "card_id": "TEXT NOT NULL",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)",
+        "text": "TEXT NOT NULL",
+        "done": "INTEGER NOT NULL CHECK(done IN (0,1))",
+        "board_id": "TEXT NOT NULL"
+      },
+      "constraints": [
+        "PRIMARY KEY(board_id, card_id, id)",
+        "UNIQUE(board_id, card_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "board_id",
+            "card_id"
+          ],
+          "to": {
+            "table": "cards",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "teams",
+      "purpose": "Ordered teams owned by one user.",
+      "columns": {
+        "id": "TEXT NOT NULL",
+        "owner_user_id": "TEXT NOT NULL",
+        "name_fa": "TEXT NOT NULL",
+        "name_en": "TEXT NOT NULL",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)"
+      },
+      "constraints": [
+        "PRIMARY KEY(owner_user_id, id)",
+        "UNIQUE(owner_user_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "owner_user_id"
+          ],
+          "to": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "RESTRICT"
+        }
+      ]
+    },
+    {
+      "name": "team_members",
+      "purpose": "Ordered members in a user's directory; a member may belong to several teams.",
+      "columns": {
+        "id": "TEXT NOT NULL",
+        "owner_user_id": "TEXT NOT NULL",
+        "name_fa": "TEXT NOT NULL",
+        "name_en": "TEXT NOT NULL",
+        "color": "TEXT NOT NULL, six-digit hexadecimal",
+        "gender": "TEXT NOT NULL CHECK(gender IN ('female','male'))",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)"
+      },
+      "constraints": [
+        "PRIMARY KEY(owner_user_id, id)",
+        "UNIQUE(owner_user_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "owner_user_id"
+          ],
+          "to": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "RESTRICT"
+        }
+      ]
+    },
+    {
+      "name": "team_memberships",
+      "purpose": "Many-to-many team/member relation with order within each team.",
+      "columns": {
+        "owner_user_id": "TEXT NOT NULL",
+        "team_id": "TEXT NOT NULL",
+        "member_id": "TEXT NOT NULL",
+        "position": "INTEGER NOT NULL CHECK(position >= 0)"
+      },
+      "constraints": [
+        "PRIMARY KEY(owner_user_id, team_id, member_id)",
+        "UNIQUE(owner_user_id, team_id, position)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "owner_user_id",
+            "team_id"
+          ],
+          "to": {
+            "table": "teams",
+            "columns": [
+              "owner_user_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "from": [
+            "owner_user_id",
+            "member_id"
+          ],
+          "to": {
+            "table": "team_members",
+            "columns": [
+              "owner_user_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "card_assignees",
+      "purpose": "Many-to-many card/member relation, constrained to the same board owner.",
+      "columns": {
+        "owner_user_id": "TEXT NOT NULL",
+        "board_id": "TEXT NOT NULL",
+        "card_id": "TEXT NOT NULL",
+        "member_id": "TEXT NOT NULL"
+      },
+      "constraints": [
+        "PRIMARY KEY(board_id, card_id, member_id)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "owner_user_id",
+            "board_id"
+          ],
+          "to": {
+            "table": "boards",
+            "columns": [
+              "owner_user_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "from": [
+            "board_id",
+            "card_id"
+          ],
+          "to": {
+            "table": "cards",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "from": [
+            "owner_user_id",
+            "member_id"
+          ],
+          "to": {
+            "table": "team_members",
+            "columns": [
+              "owner_user_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "user_data_migrations",
+      "purpose": "One-time initialization/import marker; prevents a later browser from overwriting canonical data.",
+      "columns": {
+        "user_id": "TEXT NOT NULL",
+        "migration_key": "TEXT NOT NULL",
+        "source": "TEXT NOT NULL CHECK(source IN ('localStorage-v1','sample-seed'))",
+        "completed_at": "TEXT NOT NULL, UTC ISO-8601"
+      },
+      "constraints": [
+        "PRIMARY KEY(user_id, migration_key)"
+      ],
+      "foreign_keys": [
+        {
+          "from": [
+            "user_id"
+          ],
+          "to": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ]
+    }
+  ],
+  "indexes": [
+    {
+      "name": "idx_team_memberships_member",
+      "table": "team_memberships",
+      "columns": [
+        "owner_user_id",
+        "member_id"
+      ]
+    },
+    {
+      "name": "idx_card_assignees_member",
+      "table": "card_assignees",
+      "columns": [
+        "owner_user_id",
+        "member_id"
+      ]
+    }
+  ],
+  "sample_seed": {
+    "source_reference": [
+      "frontend/src/lib/board.ts",
+      "frontend/src/lib/team-directory.ts"
+    ],
+    "user": {
+      "id": "demo-user",
+      "username": "user"
+    },
+    "board": {
+      "id": "demo-board",
+      "owner_user_id": "demo-user"
+    },
+    "columns": [
+      {
+        "id": "backlog",
+        "title": "Backlog",
+        "position": 0
+      },
+      {
+        "id": "up-next",
+        "title": "Up next",
+        "position": 1
+      },
+      {
+        "id": "in-progress",
+        "title": "In progress",
+        "position": 2
+      },
+      {
+        "id": "review",
+        "title": "Review",
+        "position": 3
+      },
+      {
+        "id": "done",
+        "title": "Done",
+        "position": 4
+      }
+    ],
+    "cards": [
+      {
+        "id": "brief",
+        "column_id": "backlog",
+        "position": 0,
+        "title": "Shape the launch story",
+        "details": "Align the homepage message with the product promise.",
+        "priority": "high",
+        "due_date_offset_days": 3,
+        "labels": [
+          "Launch",
+          "Content"
+        ],
+        "assignee_ids": [
+          "sara-ahmadi",
+          "nika-moradi"
+        ],
+        "checklist": [
+          {
+            "id": "brief-copy",
+            "text": "Align the homepage message",
+            "done": true
+          },
+          {
+            "id": "brief-review",
+            "text": "Review the final copy",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "research",
+        "column_id": "backlog",
+        "position": 1,
+        "title": "Review customer notes",
+        "details": "Pull out the themes from the latest interview round.",
+        "priority": "medium",
+        "due_date_offset_days": -2,
+        "labels": [
+          "Research"
+        ],
+        "assignee_ids": [
+          "reza-farahani"
+        ],
+        "checklist": [
+          {
+            "id": "research-themes",
+            "text": "Group recurring notes",
+            "done": false
+          },
+          {
+            "id": "research-summary",
+            "text": "Summarize customer needs",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "design-system",
+        "column_id": "up-next",
+        "position": 0,
+        "title": "Polish the design system",
+        "details": "Tighten spacing and document the core components.",
+        "priority": "medium",
+        "due_date_offset_days": 6,
+        "labels": [
+          "Design System",
+          "UI"
+        ],
+        "assignee_ids": [
+          "arman-karimi",
+          "sara-ahmadi"
+        ],
+        "checklist": [
+          {
+            "id": "design-spacing",
+            "text": "Audit spacing",
+            "done": true
+          },
+          {
+            "id": "design-components",
+            "text": "Document shared components",
+            "done": false
+          },
+          {
+            "id": "design-contrast",
+            "text": "Review color contrast",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "onboarding",
+        "column_id": "up-next",
+        "position": 1,
+        "title": "Map the first run",
+        "details": "Make the first five minutes feel effortless.",
+        "priority": "low",
+        "due_date_offset_days": 9,
+        "labels": [
+          "Onboarding"
+        ],
+        "assignee_ids": [
+          "nika-moradi"
+        ],
+        "checklist": [
+          {
+            "id": "onboarding-steps",
+            "text": "Outline the first-run steps",
+            "done": false
+          },
+          {
+            "id": "onboarding-copy",
+            "text": "Review the guidance text",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "homepage",
+        "column_id": "in-progress",
+        "position": 0,
+        "title": "Build the new homepage",
+        "details": "Bring the approved direction into the live page.",
+        "priority": "high",
+        "due_date_offset_days": 1,
+        "labels": [
+          "Development",
+          "Launch"
+        ],
+        "assignee_ids": [
+          "arman-karimi"
+        ],
+        "checklist": [
+          {
+            "id": "homepage-layout",
+            "text": "Implement the approved layout",
+            "done": true
+          },
+          {
+            "id": "homepage-responsive",
+            "text": "Check responsive behavior",
+            "done": false
+          },
+          {
+            "id": "homepage-review",
+            "text": "Review the final page",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "analytics",
+        "column_id": "in-progress",
+        "position": 1,
+        "title": "Add launch analytics",
+        "details": "Track the few signals that help us learn.",
+        "priority": "medium",
+        "due_date_offset_days": 5,
+        "labels": [
+          "Analytics"
+        ],
+        "assignee_ids": [
+          "sara-ahmadi",
+          "reza-farahani"
+        ],
+        "checklist": [
+          {
+            "id": "analytics-events",
+            "text": "Choose key events",
+            "done": false
+          },
+          {
+            "id": "analytics-verify",
+            "text": "Verify event tracking",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "mobile-review",
+        "column_id": "review",
+        "position": 0,
+        "title": "Check mobile layouts",
+        "details": "Review the key screens at small breakpoints.",
+        "priority": "high",
+        "due_date_offset_days": -1,
+        "labels": [
+          "Quality",
+          "Mobile"
+        ],
+        "assignee_ids": [
+          "nika-moradi",
+          "reza-farahani"
+        ],
+        "checklist": [
+          {
+            "id": "mobile-screens",
+            "text": "Review the main screens",
+            "done": true
+          },
+          {
+            "id": "mobile-fixes",
+            "text": "List remaining fixes",
+            "done": false
+          }
+        ]
+      },
+      {
+        "id": "brand",
+        "column_id": "done",
+        "position": 0,
+        "title": "Confirm the visual direction",
+        "details": "The team is aligned on the new look and feel.",
+        "priority": "low",
+        "due_date_offset_days": -5,
+        "labels": [
+          "Brand"
+        ],
+        "assignee_ids": [
+          "sara-ahmadi"
+        ],
+        "checklist": [
+          {
+            "id": "brand-colors",
+            "text": "Approve the color palette",
+            "done": true
+          },
+          {
+            "id": "brand-type",
+            "text": "Confirm typography",
+            "done": true
+          }
+        ]
+      }
+    ],
+    "team_members": [
+      {
+        "id": "sara-ahmadi",
+        "position": 0,
+        "name_fa": "سارا احمدی",
+        "name_en": "Sara Ahmadi",
+        "gender": "female",
+        "color": "#67317f"
+      },
+      {
+        "id": "arman-karimi",
+        "position": 1,
+        "name_fa": "آرمان کریمی",
+        "name_en": "Arman Karimi",
+        "gender": "male",
+        "color": "#1476a3"
+      },
+      {
+        "id": "nika-moradi",
+        "position": 2,
+        "name_fa": "نیکا مرادی",
+        "name_en": "Nika Moradi",
+        "gender": "female",
+        "color": "#287154"
+      },
+      {
+        "id": "reza-farahani",
+        "position": 3,
+        "name_fa": "رضا فرهادی",
+        "name_en": "Reza Farahani",
+        "gender": "male",
+        "color": "#8a5d00"
+      }
+    ],
+    "teams": [
+      {
+        "id": "web-team",
+        "owner_user_id": "demo-user",
+        "position": 0,
+        "name_fa": "تیم فنی و طراحی وب",
+        "name_en": "Web Design & Engineering",
+        "member_ids": [
+          "sara-ahmadi",
+          "arman-karimi",
+          "nika-moradi"
+        ]
+      },
+      {
+        "id": "sales-team",
+        "owner_user_id": "demo-user",
+        "position": 1,
+        "name_fa": "تیم فروش",
+        "name_en": "Sales Team",
+        "member_ids": [
+          "reza-farahani",
+          "sara-ahmadi"
+        ]
+      },
+      {
+        "id": "marketing-team",
+        "owner_user_id": "demo-user",
+        "position": 2,
+        "name_fa": "تیم بازاریابی",
+        "name_en": "Marketing Team",
+        "member_ids": [
+          "nika-moradi",
+          "reza-farahani"
+        ]
+      }
+    ],
+    "relative_due_date_offsets_days": {
+      "brief": 3,
+      "research": -2,
+      "design-system": 6,
+      "onboarding": 9,
+      "homepage": 1,
+      "analytics": 5,
+      "mobile-review": -1,
+      "brand": -5
+    }
+  },
+  "legacy_localstorage_migration": {
+    "migration_key": "localStorage-v1",
+    "source_keys": [
+      "kanban-codex.board.v1",
+      "kanban-codex.teams.v1"
+    ],
+    "policy": "Import the first signed-in browser's valid saved state once. A missing key uses the corresponding sample data; if both are missing, seed the full sample.",
+    "validation": "Validate BoardState and TeamDirectory shapes and cross-check board columns, team memberships, and card assignees.",
+    "atomicity": "Write the board, child records, team directory, assignments, and migration marker in one transaction.",
+    "idempotency": "A completed user_data_migrations row prevents re-import and overwrite.",
+    "invalid_data": "Reject without writing a marker or partial data; keep the browser values intact for retry or an explicit sample choice.",
+    "shared_demo_account_limit": "The demo account is shared. The first valid browser state wins; other browsers' localStorage is not automatically merged."
+  },
+  "initialization_order": "At application startup, create the SQLite schema and demo user only. The first normal board read seeds sample data if there is no imported or existing board. Phase 7 browser import must run before the first normal board read."
+}

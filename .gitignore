@@ -8,6 +8,7 @@ playwright-report/
 test-results/
 .env*
 !.env.example
+data/
 *.log
 *.tsbuildinfo
 next-env.d.ts

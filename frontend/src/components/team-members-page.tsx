@@ -38,8 +38,10 @@ type TeamPageCopy = {
   deleteTeam: string;
   deleteTeamDisabled: string;
   confirmDeleteTeam: (name: string) => string;
-  savedLocally: string;
-  storageUnavailable: string;
+  saving: string;
+  saved: string;
+  saveFailed: string;
+  retrySave: string;
   teamMemberships: string;
   memberNote: string;
 };
@@ -72,14 +74,16 @@ const teamPageCopy: Record<Language, TeamPageCopy> = {
     createMember: "ساخت عضو و افزودن به تیم",
     noMembers: "این تیم هنوز عضوی ندارد.",
     removeFromTeam: (name) => "حذف " + name + " از این تیم",
-    confirmRemoveLastTeamMember: (name) => name + " فقط عضو همین تیم است. با حذف او، از فهرست اعضا و کارت‌هایی که به او تخصیص داده شده نیز حذف می‌شود. ادامه می‌دهید؟",
+    confirmRemoveLastTeamMember: (name) => name + " فقط عضو همین تیم است. با حذف او، از فهرست اعضا و تسک‌هایی که به او تخصیص داده شده نیز حذف می‌شود. ادامه می‌دهید؟",
     deleteTeam: "حذف تیم",
     deleteTeamDisabled: "برای حذف تیم، ابتدا اعضای آن را خارج کنید.",
     confirmDeleteTeam: (name) => "تیم «" + name + "» حذف شود؟",
-    savedLocally: "تغییرات تیم‌ها در این مرورگر ذخیره می‌شود.",
-    storageUnavailable: "ذخیره‌سازی مرورگر در دسترس نیست.",
+    saving: "در حال ذخیره تغییرات تیم...",
+    saved: "همهٔ تغییرات تیم ذخیره شد.",
+    saveFailed: "ذخیره تغییرات تیم انجام نشد.",
+    retrySave: "تلاش دوباره برای ذخیره",
     teamMemberships: "عضو تیم‌های",
-    memberNote: "حذف از آخرین تیم، این عضو را از کارت‌های تخصیص‌یافته هم برمی‌دارد.",
+    memberNote: "حذف از آخرین تیم، این عضو را از تسک‌های تخصیص‌یافته هم برمی‌دارد.",
   },
   en: {
     pageTitle: "Team members",
@@ -112,8 +116,10 @@ const teamPageCopy: Record<Language, TeamPageCopy> = {
     deleteTeam: "Delete team",
     deleteTeamDisabled: "Remove the team members before deleting this team.",
     confirmDeleteTeam: (name) => "Delete the “" + name + "” team?",
-    savedLocally: "Team changes are saved in this browser.",
-    storageUnavailable: "Browser storage is unavailable.",
+    saving: "Saving team changes...",
+    saved: "Team changes saved to the database.",
+    saveFailed: "Team changes could not be saved.",
+    retrySave: "Retry saving",
     teamMemberships: "Member of",
     memberNote: "Removing a member from their last team also clears their card assignments.",
   },
@@ -144,14 +150,16 @@ function PeopleIcon() {
 export function TeamMembersPage({
   directory,
   language,
-  storageUnavailable,
+  saveState,
+  onRetrySave,
   onDirectoryChange,
   onRemoveMember,
   onDeleteTeam,
 }: {
   directory: TeamDirectory;
   language: Language;
-  storageUnavailable: boolean;
+  saveState: "saved" | "saving" | "error";
+  onRetrySave: () => void;
   onDirectoryChange: (directory: TeamDirectory) => void;
   onRemoveMember: (teamId: string, memberId: string) => void;
   onDeleteTeam: (teamId: string) => boolean;
@@ -252,9 +260,10 @@ export function TeamMembersPage({
           <h1 id="team-page-title" className="page-title">{copy.pageTitle}</h1>
           <p className="page-subtitle">{copy.pageDescription}</p>
         </div>
-        <div className="team-save-status" role="status">
-          <span className={"storage-status-dot" + (storageUnavailable ? " is-unavailable" : "")} aria-hidden="true" />
-          {storageUnavailable ? copy.storageUnavailable : copy.savedLocally}
+        <div className={"team-save-status" + (saveState === "error" ? " is-unavailable" : saveState === "saving" ? " is-saving" : "")} role="status">
+          <span className={"storage-status-dot" + (saveState === "error" ? " is-unavailable" : "")} aria-hidden="true" />
+          {saveState === "saving" ? copy.saving : saveState === "error" ? copy.saveFailed : copy.saved}
+          {saveState === "error" && <button className="save-retry-button" type="button" onClick={onRetrySave}>{copy.retrySave}</button>}
         </div>
       </header>
 
