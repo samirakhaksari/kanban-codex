@@ -24,3 +24,33 @@ Official references: https://docs.railway.com/pricing/plans, https://docs.railwa
 ## Verification before cloud rollout — 2026-11-16
 
 ESLint, the default static-export build, and the Vercel proxy build passed. A local production Next.js server was checked against the existing backend: health, sign-in cookie, session restoration and an authenticated profile request all passed through /api. No local board/profile data was edited by this check. The prior app checks remain 26 Vitest, 56 backend and 21 distinct browser scenarios.
+
+
+## Current hosted release — 2026-11-16
+
+- Public app: https://kanban-codex.vercel.app/.
+- Backend: https://kanban-api-production-795c7fc6.up.railway.app/.
+- Vercel production app revision cef6239 was Ready. The project builds frontend/ with default Next.js output settings. KANBAN_API_ORIGIN is configured for Production and Preview.
+- Railway service kanban-api uses Docker from the repository root, one replica, PORT=8000, KANBAN_ENV=production, healthcheck /api/health with 120-second timeout, On Failure with 3 retries, and Serverless enabled.
+- A 500 MB persistent volume is mounted at /app/data, verified in the volume settings. Hosted data is separate from the local nine-card board; the hosted board starts with eight sample cards.
+- The user added the OpenRouter key directly in Railway. A new cryptographically random 32-byte session secret was generated and saved there without printing or committing it. Both remain private backend variables.
+- Hosting uses the account's free trial/credit allowance. The dashboard initially showed 30 days or $5 remaining. No paid upgrade was enabled. Availability after that depends on Railway's current free-plan eligibility and resource quota; this is not an unlimited free server. AI calls use the user's existing OpenRouter account independently of hosting credits.
+
+## Live verification
+
+- The Vercel /api/health proxy returned ok. Sign-in, cookie session, board initialization/read and authenticated profile access succeeded through the public Vercel domain.
+- One short real AI request returned “Connection confirmed.” The complete board JSON was identical before/after that request.
+- A fresh Chrome tab restored the signed session and displayed the eight-card board. Light/dark theme switching, Reports and the profile form worked. Actual public-page screenshots were saved outside the repository.
+- The original long-open browser tab retained stale behavior after deployment; verify the release in a fresh tab, or hard-refresh an already-open tab.
+- Local SQLite, backups and .env files were excluded from Git and were not copied to cloud hosting.
+
+## Subsequent full releases
+
+Vercel follows main. Railway currently follows codex/publish-full-app. Keep the backend release branch at the same tested commit when publishing backend changes:
+
+```sh
+git push origin main
+git push origin main:codex/publish-full-app
+```
+
+These are normal fast-forward pushes; do not force-push either branch. A documentation-only commit can be skipped by Vercel's existing root-directory change detection.

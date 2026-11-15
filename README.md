@@ -1,3 +1,4 @@
 # Kanban Codex
 
-For local setup, see docs/LOCAL-SETUP.md.
+Local setup: [docs/LOCAL-SETUP.md](docs/LOCAL-SETUP.md).
+Full hosted app and release steps: [docs/CLOUD-SETUP.md](docs/CLOUD-SETUP.md).
