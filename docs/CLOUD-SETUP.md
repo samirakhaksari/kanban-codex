@@ -4,7 +4,7 @@ The existing Vercel project builds frontend/. The Python backend must run separa
 
 ## Railway backend
 
-1. Deploy this repository from its root using Dockerfile and railway.toml. Use one replica.
+1. Deploy this repository from its root using Dockerfile. Use one replica. In service Settings set the healthcheck path to /api/health, timeout to 120 seconds and restart policy to On Failure (3 retries). New Railway services no longer accept the legacy Config-as-Code format; configure these settings in the dashboard.
 2. Attach a persistent volume at /app/data before using the app. KANBAN_DATA_DIR defaults to that path. Do not rely on the container's temporary filesystem for SQLite.
 3. Set PORT=8000 and KANBAN_ENV=production. Set a stable random KANBAN_SESSION_SECRET and the existing OPENROUTER_API_KEY privately in Railway's variables. Do not put them in Git, the frontend or chat. The demo credentials remain user/password and all group visitors share one demo account and board.
 4. Generate a Railway HTTPS domain with target port 8000. Verify /api/health returns {"status":"ok"}.
@@ -20,3 +20,7 @@ The existing Vercel project builds frontend/. The Python backend must run separa
 Local Docker keeps using a static Next.js export when KANBAN_API_ORIGIN is unset. Existing local SQLite data and secrets are ignored by Git and are not uploaded automatically. The hosted app starts with separate sample data unless a data migration is explicitly requested.
 
 Official references: https://docs.railway.com/pricing/plans, https://docs.railway.com/volumes/reference, https://docs.railway.com/config-as-code/reference.
+
+## Verification before cloud rollout — 2026-11-16
+
+ESLint, the default static-export build, and the Vercel proxy build passed. A local production Next.js server was checked against the existing backend: health, sign-in cookie, session restoration and an authenticated profile request all passed through /api. No local board/profile data was edited by this check. The prior app checks remain 26 Vitest, 56 backend and 21 distinct browser scenarios.
